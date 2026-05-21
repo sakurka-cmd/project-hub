@@ -49,7 +49,7 @@ interface CredentialDialogProps {
   credential?: Credential | null;
 }
 
-function CredentialDialog({ open, onOpenChange, mode, credential }: CredentialDialogProps) {
+export function CredentialDialog({ open, onOpenChange, mode, credential }: CredentialDialogProps) {
   const selectedProjectId = useAppStore(s => s.selectedProjectId);
   const createCredential = useAppStore(s => s.createCredential);
   const updateCredential = useAppStore(s => s.updateCredential);

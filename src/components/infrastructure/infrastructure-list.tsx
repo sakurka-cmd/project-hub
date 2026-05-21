@@ -57,7 +57,7 @@ interface InfraDialogProps {
   item?: InfrastructureItem | null;
 }
 
-function InfraDialog({ open, onOpenChange, mode, item }: InfraDialogProps) {
+export function InfraDialog({ open, onOpenChange, mode, item }: InfraDialogProps) {
   const selectedProjectId = useAppStore(s => s.selectedProjectId);
   const createInfrastructure = useAppStore(s => s.createInfrastructure);
   const updateInfrastructure = useAppStore(s => s.updateInfrastructure);

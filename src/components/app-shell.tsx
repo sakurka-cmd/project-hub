@@ -1,6 +1,5 @@
 'use client';
 
-import { useAppStore } from '@/lib/store';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ListTree, Menu, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,7 +32,7 @@ function SidebarContent() {
           disabled
         >
           <ListTree className="h-4 w-4" />
-          Бэклог
+          Проекты
         </Button>
       </nav>
     </div>
@@ -80,7 +79,7 @@ export function AppShell() {
           </div>
         )}
 
-        {/* View content — always backlog */}
+        {/* View content */}
         <div className="p-4 md:p-6 lg:p-8">
           <UnifiedBacklog />
         </div>

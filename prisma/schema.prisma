@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ПРОЕКТЫ ====================
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("active") // active, paused, completed, archived
+  color       String   @default("#6366f1")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks             Task[]
+  categories        TaskCategory[]
+  artifacts         Artifact[]
+  credentials       Credential[]
+  infrastructure    InfrastructureItem[]
+}
+
+// ==================== КАТЕГОРИИ ЗАДАЧ ====================
+
+model TaskCategory {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("#6b7280")
+  projectId String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+}
+
+// ==================== ЗАДАЧИ ====================
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("todo") // todo, in_progress, review, done, cancelled
+  priority    String   @default("medium") // low, medium, high, critical
+  projectId   String
+  categoryId  String?
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category  TaskCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+}
+
+// ==================== АРТЕФАКТЫ ====================
+
+model Artifact {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  type        String   @default("document") // document, letter, contract, report, other
+  fileName    String?
+  fileContent String?
+  projectId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ==================== УЧЁТНЫЕ ЗАПИСИ ====================
+
+model Credential {
+  id          String   @id @default(cuid())
+  service     String
+  username    String
+  password    String
+  url         String?
+  notes       String?
+  projectId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ==================== ИНФРАСТРУКТУРА ====================
+
+model InfrastructureItem {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   @default("server") // server, database, service, api, storage, other
+  host        String?
+  port        String?
+  credentials String?
+  description String?
+  projectId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}

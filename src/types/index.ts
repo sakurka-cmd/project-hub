@@ -1,0 +1,100 @@
+// ==================== ПРОЕКТЫ ====================
+export interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  status: 'active' | 'paused' | 'completed' | 'archived';
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { tasks: number };
+  categories?: TaskCategory[];
+  tasks?: Task[];
+  artifacts?: Artifact[];
+  credentials?: Credential[];
+  infrastructure?: InfrastructureItem[];
+}
+
+// ==================== КАТЕГОРИИ ====================
+export interface TaskCategory {
+  id: string;
+  name: string;
+  color: string;
+  projectId: string;
+  createdAt: string;
+  _count?: { tasks: number };
+}
+
+// ==================== ЗАДАЧИ ====================
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  status: 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  projectId: string;
+  categoryId: string | null;
+  dueDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  project?: Project;
+  category?: TaskCategory | null;
+}
+
+// ==================== АРТЕФАКТЫ ====================
+export interface Artifact {
+  id: string;
+  title: string;
+  description: string | null;
+  type: 'document' | 'letter' | 'contract' | 'report' | 'other';
+  fileName: string | null;
+  fileContent: string | null;
+  projectId: string;
+  createdAt: string;
+  updatedAt: string;
+  project?: Project;
+}
+
+// ==================== УЧЁТНЫЕ ЗАПИСИ ====================
+export interface Credential {
+  id: string;
+  service: string;
+  username: string;
+  password: string;
+  url: string | null;
+  notes: string | null;
+  projectId: string;
+  createdAt: string;
+  updatedAt: string;
+  project?: Project;
+}
+
+// ==================== ИНФРАСТРУКТУРА ====================
+export interface InfrastructureItem {
+  id: string;
+  name: string;
+  type: 'server' | 'database' | 'service' | 'api' | 'storage' | 'other';
+  host: string | null;
+  port: string | null;
+  credentials: string | null;
+  description: string | null;
+  projectId: string;
+  createdAt: string;
+  updatedAt: string;
+  project?: Project;
+}
+
+// ==================== DASHBOARD ====================
+export interface DashboardStats {
+  totalProjects: number;
+  activeProjectsCount: number;
+  totalTasks: number;
+  tasksByStatus: Record<string, number>;
+  recentTasks: Task[];
+  criticalTasks: number;
+  criticalTasksList: Task[];
+}
+
+// ==================== APP STATE ====================
+export type AppView = 'dashboard' | 'projects' | 'project-detail';
+export type ProjectTab = 'tasks' | 'artifacts' | 'credentials' | 'infrastructure';

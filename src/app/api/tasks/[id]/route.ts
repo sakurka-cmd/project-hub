@@ -15,6 +15,15 @@ export async function GET(
         project: {
           select: { id: true, name: true, color: true },
         },
+        parent: {
+          select: { id: true, title: true, workItemType: true },
+        },
+        children: {
+          orderBy: { order: 'asc' },
+        },
+        sprint: {
+          select: { id: true, name: true, status: true },
+        },
       },
     })
 
@@ -42,7 +51,18 @@ export async function PUT(
   try {
     const { id } = await params
     const body = await request.json()
-    const { title, description, status, priority, categoryId, dueDate } = body
+    const {
+      title,
+      description,
+      status,
+      priority,
+      workItemType,
+      parentId,
+      sprintId,
+      order,
+      categoryId,
+      dueDate,
+    } = body
 
     const existing = await db.task.findUnique({ where: { id } })
     if (!existing) {
@@ -59,10 +79,22 @@ export async function PUT(
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(status !== undefined && { status }),
         ...(priority !== undefined && { priority }),
+        ...(workItemType !== undefined && { workItemType }),
+        ...(parentId !== undefined && { parentId: parentId || null }),
+        ...(sprintId !== undefined && { sprintId: sprintId || null }),
+        ...(order !== undefined && { order }),
         ...(categoryId !== undefined && { categoryId: categoryId || null }),
         ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
       },
-      include: { category: true },
+      include: {
+        category: true,
+        parent: {
+          select: { id: true, title: true, workItemType: true },
+        },
+        sprint: {
+          select: { id: true, name: true, status: true },
+        },
+      },
     })
 
     return NextResponse.json(task)

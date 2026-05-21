@@ -7,12 +7,18 @@ export async function GET(request: NextRequest) {
     const projectId = searchParams.get('projectId')
     const status = searchParams.get('status')
     const categoryId = searchParams.get('categoryId')
+    const parentId = searchParams.get('parentId')
+    const sprintId = searchParams.get('sprintId')
+    const workItemType = searchParams.get('workItemType')
 
     const where: Record<string, unknown> = {}
 
     if (projectId) where.projectId = projectId
     if (status) where.status = status
     if (categoryId) where.categoryId = categoryId
+    if (parentId !== null) where.parentId = parentId || null
+    if (sprintId) where.sprintId = sprintId
+    if (workItemType) where.workItemType = workItemType
 
     const tasks = await db.task.findMany({
       where,
@@ -21,8 +27,27 @@ export async function GET(request: NextRequest) {
         project: {
           select: { id: true, name: true, color: true },
         },
+        parent: {
+          select: { id: true, title: true, workItemType: true },
+        },
+        children: {
+          orderBy: { order: 'asc' },
+          include: {
+            children: {
+              orderBy: { order: 'asc' },
+              include: {
+                children: {
+                  orderBy: { order: 'asc' },
+                },
+              },
+            },
+          },
+        },
+        sprint: {
+          select: { id: true, name: true, status: true },
+        },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ order: 'asc' }, { updatedAt: 'desc' }],
     })
 
     return NextResponse.json(tasks)
@@ -38,7 +63,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { title, description, status, priority, projectId, categoryId, dueDate } = body
+    const {
+      title,
+      description,
+      status,
+      priority,
+      workItemType,
+      parentId,
+      sprintId,
+      order,
+      projectId,
+      categoryId,
+      dueDate,
+    } = body
 
     if (!title || typeof title !== 'string' || title.trim() === '') {
       return NextResponse.json(
@@ -72,17 +109,49 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (parentId) {
+      const parent = await db.task.findUnique({ where: { id: parentId } })
+      if (!parent) {
+        return NextResponse.json(
+          { error: 'Parent task not found' },
+          { status: 404 }
+        )
+      }
+    }
+
+    if (sprintId) {
+      const sprint = await db.sprint.findUnique({ where: { id: sprintId } })
+      if (!sprint) {
+        return NextResponse.json(
+          { error: 'Sprint not found' },
+          { status: 404 }
+        )
+      }
+    }
+
     const task = await db.task.create({
       data: {
         title: title.trim(),
         description: description?.trim() || null,
         status: status || 'todo',
         priority: priority || 'medium',
+        workItemType: workItemType || 'task',
+        parentId: parentId || null,
+        sprintId: sprintId || null,
+        order: order ?? 0,
         projectId,
         categoryId: categoryId || null,
         dueDate: dueDate ? new Date(dueDate) : null,
       },
-      include: { category: true },
+      include: {
+        category: true,
+        parent: {
+          select: { id: true, title: true, workItemType: true },
+        },
+        sprint: {
+          select: { id: true, name: true, status: true },
+        },
+      },
     })
 
     return NextResponse.json(task, { status: 201 })

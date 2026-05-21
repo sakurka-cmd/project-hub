@@ -44,6 +44,62 @@ export const PROJECT_STATUS_COLORS: Record<string, string> = {
   archived: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
 
+export const WORK_ITEM_TYPE_LABELS: Record<string, string> = {
+  epic: 'Epic',
+  feature: 'Feature',
+  userStory: 'История',
+  bug: 'Баг',
+  task: 'Задача',
+};
+
+export const WORK_ITEM_TYPE_COLORS: Record<string, string> = {
+  epic: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400',
+  feature: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+  userStory: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-400',
+  bug: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+  task: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+};
+
+export const WORK_ITEM_TYPE_BORDER_COLORS: Record<string, string> = {
+  epic: 'border-l-violet-500',
+  feature: 'border-l-blue-500',
+  userStory: 'border-l-teal-500',
+  bug: 'border-l-red-500',
+  task: 'border-l-gray-400',
+};
+
+export const WORK_ITEM_TYPES = ['epic', 'feature', 'userStory', 'bug', 'task'] as const;
+
+export const WORK_ITEM_TYPE_PREFIX: Record<string, string> = {
+  epic: 'EP',
+  feature: 'FE',
+  userStory: 'US',
+  bug: 'BG',
+  task: 'TK',
+};
+
+export const CHILD_TYPE_FOR_PARENT: Record<string, 'feature' | 'userStory' | 'bug' | 'task'> = {
+  epic: 'feature',
+  feature: 'userStory',
+  userStory: 'task',
+  bug: 'task',
+  task: 'task',
+};
+
+export const SPRINT_STATUS_LABELS: Record<string, string> = {
+  planning: 'Планирование',
+  active: 'Активный',
+  completed: 'Завершён',
+};
+
+export const SPRINT_STATUS_COLORS: Record<string, string> = {
+  planning: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400',
+  active: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
+  completed: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
+};
+
+export const SPRINT_STATUSES = ['planning', 'active', 'completed'] as const;
+
 export const ARTIFACT_TYPE_LABELS: Record<string, string> = {
   document: 'Документ',
   letter: 'Письмо',
@@ -94,4 +150,8 @@ export function formatDate(dateStr: string): string {
 export function truncate(str: string | null, maxLen: number): string {
   if (!str) return '—';
   return str.length > maxLen ? str.slice(0, maxLen) + '…' : str;
+}
+
+export function getShortId(id: string): string {
+  return id.slice(-6).toUpperCase();
 }

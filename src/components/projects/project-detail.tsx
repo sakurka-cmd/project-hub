@@ -8,7 +8,7 @@ import {
   PROJECT_STATUS_COLORS,
   PROJECT_STATUSES,
 } from '@/lib/constants';
-import { ArrowLeft, Trash2, Settings } from 'lucide-react';
+import { ArrowLeft, Trash2, Settings, LayoutList, Kanban, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -32,11 +32,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { CreateProjectDialog } from '@/components/projects/create-project-dialog';
-import { TaskBoard } from '@/components/tasks/task-board';
+import { BacklogView } from '@/components/tasks/backlog-view';
+import { BoardView } from '@/components/tasks/board-view';
+import { SprintList } from '@/components/sprints/sprint-list';
 import { ArtifactList } from '@/components/artifacts/artifact-list';
 import { CredentialList } from '@/components/credentials/credential-list';
 import { InfrastructureList } from '@/components/infrastructure/infrastructure-list';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import type { TaskSubView } from '@/types';
 
 export function ProjectDetail() {
   const project = useAppStore(s => s.currentProject);
@@ -51,6 +55,7 @@ export function ProjectDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [taskSubView, setTaskSubView] = useState<TaskSubView>('backlog');
 
   const { toast } = useToast();
 
@@ -89,8 +94,14 @@ export function ProjectDetail() {
     }
   };
 
-  const tabs: { value: ProjectTab; label: string }[] = [
-    { value: 'tasks', label: 'Задачи' },
+  const handleTabChange = (v: string) => {
+    setProjectTab(v as ProjectTab);
+    if (v === 'backlog') setTaskSubView('backlog');
+  };
+
+  const mainTabs: { value: ProjectTab; label: string }[] = [
+    { value: 'backlog', label: 'Бэклог' },
+    { value: 'sprints', label: 'Спринты' },
     { value: 'artifacts', label: 'Артефакты' },
     { value: 'credentials', label: 'Учётные записи' },
     { value: 'infrastructure', label: 'Инфраструктура' },
@@ -145,17 +156,49 @@ export function ProjectDetail() {
       <Separator />
 
       {/* Tabs */}
-      <Tabs value={projectTab} onValueChange={(v) => setProjectTab(v as ProjectTab)}>
+      <Tabs value={projectTab} onValueChange={handleTabChange}>
         <TabsList className="w-full sm:w-auto">
-          {tabs.map(tab => (
+          {mainTabs.map(tab => (
             <TabsTrigger key={tab.value} value={tab.value} className="text-sm">
               {tab.label}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        <TabsContent value="tasks" className="mt-4">
-          <TaskBoard />
+        {/* Backlog/Board paired view */}
+        {(projectTab === 'backlog' || projectTab === 'board') && (
+          <TabsContent value={projectTab} className="mt-4">
+            {/* Sub-navigation toggle */}
+            <div className="flex items-center gap-1 mb-4 rounded-lg border bg-muted/30 p-1 w-fit">
+              <button
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  taskSubView === 'backlog' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
+                onClick={() => { setTaskSubView('backlog'); setProjectTab('backlog'); }}
+              >
+                <LayoutList className="h-4 w-4" />
+                Бэклог
+              </button>
+              <button
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  taskSubView === 'board' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                )}
+                onClick={() => { setTaskSubView('board'); setProjectTab('board'); }}
+              >
+                <Kanban className="h-4 w-4" />
+                Доска
+              </button>
+            </div>
+
+            {taskSubView === 'backlog' && <BacklogView />}
+            {taskSubView === 'board' && <BoardView />}
+          </TabsContent>
+        )}
+
+        <TabsContent value="sprints" className="mt-4">
+          <SprintList />
         </TabsContent>
         <TabsContent value="artifacts" className="mt-4">
           <ArtifactList />

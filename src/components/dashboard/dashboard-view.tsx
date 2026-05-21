@@ -6,9 +6,10 @@ import {
   TASK_STATUS_COLORS,
   PRIORITY_LABELS,
   PRIORITY_COLORS,
-  PROJECT_STATUS_LABELS,
-  PROJECT_STATUS_COLORS,
-  truncate,
+  WORK_ITEM_TYPE_LABELS,
+  WORK_ITEM_TYPE_COLORS,
+  SPRINT_STATUS_LABELS,
+  SPRINT_STATUS_COLORS,
   formatDate,
 } from '@/lib/constants';
 import {
@@ -17,12 +18,39 @@ import {
   ListTodo,
   AlertTriangle,
   ArrowRight,
+  Zap,
+  Diamond,
+  Hexagon,
+  FileText,
+  Bug,
+  CheckSquare,
+  CalendarDays,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+
+function getTypeIcon(type: string) {
+  switch (type) {
+    case 'epic': return <Diamond className="h-3.5 w-3.5" />;
+    case 'feature': return <Hexagon className="h-3.5 w-3.5" />;
+    case 'userStory': return <FileText className="h-3.5 w-3.5" />;
+    case 'bug': return <Bug className="h-3.5 w-3.5" />;
+    default: return <CheckSquare className="h-3.5 w-3.5" />;
+  }
+}
+
+function getTypeIconColor(type: string): string {
+  switch (type) {
+    case 'epic': return 'text-violet-600 dark:text-violet-400';
+    case 'feature': return 'text-blue-600 dark:text-blue-400';
+    case 'userStory': return 'text-teal-600 dark:text-teal-400';
+    case 'bug': return 'text-red-600 dark:text-red-400';
+    default: return 'text-gray-500 dark:text-gray-400';
+  }
+}
 
 export function DashboardView() {
   const dashboard = useAppStore(s => s.dashboard);
@@ -86,6 +114,19 @@ export function DashboardView() {
     0
   );
 
+  const tasksByType = [
+    { key: 'epic', label: WORK_ITEM_TYPE_LABELS.epic, icon: Diamond, color: 'bg-violet-500' },
+    { key: 'feature', label: WORK_ITEM_TYPE_LABELS.feature, icon: Hexagon, color: 'bg-blue-500' },
+    { key: 'userStory', label: WORK_ITEM_TYPE_LABELS.userStory, icon: FileText, color: 'bg-teal-500' },
+    { key: 'bug', label: WORK_ITEM_TYPE_LABELS.bug, icon: Bug, color: 'bg-red-500' },
+    { key: 'task', label: WORK_ITEM_TYPE_LABELS.task, icon: CheckSquare, color: 'bg-gray-400' },
+  ];
+
+  const totalForTypeBar = tasksByType.reduce(
+    (sum, t) => sum + (dashboard.tasksByType?.[t.key] || 0),
+    0
+  );
+
   return (
     <div className="space-y-6">
       <div>
@@ -134,7 +175,12 @@ export function DashboardView() {
                   onClick={() => selectProject(task.projectId)}
                 >
                   <div className="flex-1 min-w-0 space-y-1">
-                    <p className="text-sm font-medium truncate">{task.title}</p>
+                    <div className="flex items-center gap-1.5">
+                      <span className={getTypeIconColor(task.workItemType || 'task')}>
+                        {getTypeIcon(task.workItemType || 'task')}
+                      </span>
+                      <p className="text-sm font-medium truncate">{task.title}</p>
+                    </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       {task.project && (
                         <span className="text-xs text-muted-foreground truncate">
@@ -231,6 +277,95 @@ export function DashboardView() {
               <p className="text-sm text-muted-foreground py-4 text-center">
                 Нет данных для отображения
               </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Tasks by Type */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Задачи по типам</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {tasksByType.map(type => {
+              const count = dashboard.tasksByType?.[type.key] || 0;
+              const pct = totalForTypeBar > 0 ? (count / totalForTypeBar) * 100 : 0;
+              const Icon = type.icon;
+              return (
+                <div key={type.key} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Icon className={getTypeIconColor(type.key)} />
+                      <span className="text-muted-foreground">{type.label}</span>
+                    </div>
+                    <span className="font-semibold">{count}</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${type.color}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            {totalForTypeBar === 0 && (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Нет данных для отображения
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Active Sprints */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Спринты</CardTitle>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                <Zap className="h-3 w-3 mr-1" />
+                {dashboard.activeSprints} активных
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {(!dashboard.recentSprints || dashboard.recentSprints.length === 0) ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Нет спринтов
+              </p>
+            ) : (
+              dashboard.recentSprints.map(sprint => (
+                <div
+                  key={sprint.id}
+                  className="flex items-center gap-3 rounded-lg p-2.5 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                    <CalendarDays className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{sprint.name}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-muted-foreground">
+                        {sprint.startDate ? formatDate(sprint.startDate) : 'Нет даты'}
+                      </span>
+                      {sprint.endDate && (
+                        <span className="text-[11px] text-muted-foreground">— {formatDate(sprint.endDate)}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground">{sprint._count?.tasks ?? 0} задач</span>
+                    <Badge
+                      variant="secondary"
+                      className={`text-[10px] px-1.5 py-0 ${SPRINT_STATUS_COLORS[sprint.status] || ''}`}
+                    >
+                      {SPRINT_STATUS_LABELS[sprint.status]}
+                    </Badge>
+                  </div>
+                </div>
+              ))
             )}
           </CardContent>
         </Card>

@@ -1,0 +1,15 @@
+services:
+  project-hub:
+    build: .
+    container_name: project-hub
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - project-hub-data:/app/data
+    environment:
+      - DATABASE_URL=file:/app/data/projecthub.db
+      - NODE_ENV=production
+
+volumes:
+  project-hub-data:

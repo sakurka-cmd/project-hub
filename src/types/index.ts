@@ -13,6 +13,20 @@ export interface Project {
   artifacts?: Artifact[];
   credentials?: Credential[];
   infrastructure?: InfrastructureItem[];
+  sprints?: Sprint[];
+}
+
+// ==================== СПРИНТЫ ====================
+export interface Sprint {
+  id: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  status: 'planning' | 'active' | 'completed';
+  projectId: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { tasks: number };
 }
 
 // ==================== КАТЕГОРИИ ====================
@@ -32,6 +46,10 @@ export interface Task {
   description: string | null;
   status: 'todo' | 'in_progress' | 'review' | 'done' | 'cancelled';
   priority: 'low' | 'medium' | 'high' | 'critical';
+  workItemType: 'epic' | 'feature' | 'userStory' | 'bug' | 'task';
+  parentId: string | null;
+  sprintId: string | null;
+  order: number;
   projectId: string;
   categoryId: string | null;
   dueDate: string | null;
@@ -39,6 +57,9 @@ export interface Task {
   updatedAt: string;
   project?: Project;
   category?: TaskCategory | null;
+  parent?: Task | null;
+  children?: Task[];
+  sprint?: Sprint | null;
 }
 
 // ==================== АРТЕФАКТЫ ====================
@@ -90,11 +111,15 @@ export interface DashboardStats {
   activeProjectsCount: number;
   totalTasks: number;
   tasksByStatus: Record<string, number>;
+  tasksByType: Record<string, number>;
   recentTasks: Task[];
   criticalTasks: number;
   criticalTasksList: Task[];
+  activeSprints: number;
+  recentSprints: Sprint[];
 }
 
 // ==================== APP STATE ====================
 export type AppView = 'dashboard' | 'projects' | 'project-detail';
-export type ProjectTab = 'tasks' | 'artifacts' | 'credentials' | 'infrastructure';
+export type ProjectTab = 'backlog' | 'board' | 'sprints' | 'artifacts' | 'credentials' | 'infrastructure';
+export type TaskSubView = 'backlog' | 'board';

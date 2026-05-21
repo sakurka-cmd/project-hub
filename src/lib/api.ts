@@ -1,6 +1,6 @@
 import type {
   Project, Task, TaskCategory, Artifact, Credential,
-  InfrastructureItem, DashboardStats
+  InfrastructureItem, DashboardStats, Sprint
 } from '@/types';
 
 const BASE = '/api';
@@ -37,11 +37,14 @@ export const api = {
     fetch(`${BASE}/categories/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
   // Tasks
-  getTasks: (params?: { projectId?: string; status?: string; categoryId?: string }) => {
+  getTasks: (params?: { projectId?: string; status?: string; categoryId?: string; parentId?: string | null; sprintId?: string; workItemType?: string }) => {
     const qs = new URLSearchParams();
     if (params?.projectId) qs.set('projectId', params.projectId);
     if (params?.status) qs.set('status', params.status);
     if (params?.categoryId) qs.set('categoryId', params.categoryId);
+    if (params?.parentId !== undefined) qs.set('parentId', params.parentId);
+    if (params?.sprintId) qs.set('sprintId', params.sprintId);
+    if (params?.workItemType) qs.set('workItemType', params.workItemType);
     return fetchJSON<Task[]>(`${BASE}/tasks?${qs}`);
   },
   createTask: (data: Partial<Task> & { projectId: string }) =>
@@ -50,6 +53,16 @@ export const api = {
     fetchJSON<Task>(`${BASE}/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteTask: (id: string) =>
     fetch(`${BASE}/tasks/${id}`, { method: 'DELETE' }).then(r => r.json()),
+
+  // Sprints
+  getSprints: (projectId: string) =>
+    fetchJSON<Sprint[]>(`${BASE}/sprints?projectId=${projectId}`),
+  createSprint: (data: { name: string; startDate?: string | null; endDate?: string | null; status?: string; projectId: string }) =>
+    fetchJSON<Sprint>(`${BASE}/sprints`, { method: 'POST', body: JSON.stringify(data) }),
+  updateSprint: (id: string, data: Partial<Sprint>) =>
+    fetchJSON<Sprint>(`${BASE}/sprints/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSprint: (id: string) =>
+    fetch(`${BASE}/sprints/${id}`, { method: 'DELETE' }).then(r => r.json()),
 
   // Artifacts
   getArtifacts: (projectId: string) =>

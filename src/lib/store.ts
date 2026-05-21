@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Project, DashboardStats, AppView, ProjectTab, Task, TaskCategory, Artifact, Credential, InfrastructureItem } from '@/types';
+import type { Project, DashboardStats, AppView, ProjectTab, Task, TaskCategory, Artifact, Credential, InfrastructureItem, Sprint } from '@/types';
 import { api } from '@/lib/api';
 
 interface AppState {
@@ -22,6 +22,7 @@ interface AppState {
   artifacts: Artifact[];
   credentials: Credential[];
   infrastructure: InfrastructureItem[];
+  sprints: Sprint[];
 
   // Loading
   loading: boolean;
@@ -35,6 +36,7 @@ interface AppState {
   loadArtifacts: (projectId: string) => Promise<void>;
   loadCredentials: (projectId: string) => Promise<void>;
   loadInfrastructure: (projectId: string) => Promise<void>;
+  loadSprints: (projectId: string) => Promise<void>;
 
   // Task actions
   createTask: (data: Partial<Task> & { projectId: string }) => Promise<void>;
@@ -49,6 +51,11 @@ interface AppState {
   // Category actions
   createCategory: (data: Partial<TaskCategory> & { projectId: string }) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
+
+  // Sprint actions
+  createSprint: (data: { name: string; startDate?: string | null; endDate?: string | null; status?: string; projectId: string }) => Promise<void>;
+  updateSprint: (id: string, data: Partial<Sprint>) => Promise<void>;
+  deleteSprint: (id: string) => Promise<void>;
 
   // Artifact actions
   createArtifact: (data: Partial<Artifact> & { projectId: string }) => Promise<void>;
@@ -75,7 +82,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ selectedProjectId: id, view: 'project-detail' });
     get().loadProjectDetail(id);
   },
-  projectTab: 'tasks',
+  projectTab: 'backlog',
   setProjectTab: (t) => set({ projectTab: t }),
 
   // Data
@@ -87,6 +94,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   artifacts: [],
   credentials: [],
   infrastructure: [],
+  sprints: [],
 
   loading: false,
 
@@ -109,13 +117,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadProjectDetail: async (id: string) => {
     set({ loading: true });
     try {
-      const [project, tasks, categories, artifacts, credentials, infrastructure] = await Promise.all([
+      const [project, tasks, categories, artifacts, credentials, infrastructure, sprints] = await Promise.all([
         api.getProject(id),
         api.getTasks({ projectId: id }),
         api.getCategories(id),
         api.getArtifacts(id),
         api.getCredentials(id),
         api.getInfrastructure(id),
+        api.getSprints(id),
       ]);
       set({
         currentProject: project,
@@ -124,6 +133,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         artifacts: artifacts,
         credentials: credentials,
         infrastructure: infrastructure,
+        sprints: sprints,
         loading: false,
       });
     } catch (e) { set({ loading: false }); console.error(e); }
@@ -164,10 +174,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) { console.error(e); }
   },
 
+  loadSprints: async (projectId: string) => {
+    try {
+      const data = await api.getSprints(projectId);
+      set({ sprints: data });
+    } catch (e) { console.error(e); }
+  },
+
   // Task CRUD
   createTask: async (data) => {
     await api.createTask(data);
-    await get().loadTasks(data.projectId);
+    const pid = data.projectId || get().selectedProjectId;
+    if (pid) await get().loadTasks(pid);
     await get().loadDashboard();
   },
   updateTask: async (id, data) => {
@@ -179,7 +197,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteTask: async (id) => {
     await api.deleteTask(id);
     const pid = get().selectedProjectId;
-    if (pid) await get().loadTasks(pid);
+    if (pid) {
+      await get().loadTasks(pid);
+      await get().loadSprints(pid);
+    }
     await get().loadDashboard();
   },
 
@@ -211,6 +232,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     await api.deleteCategory(id);
     const pid = get().selectedProjectId;
     if (pid) await get().loadCategories(pid);
+  },
+
+  // Sprint CRUD
+  createSprint: async (data) => {
+    await api.createSprint(data);
+    await get().loadSprints(data.projectId);
+  },
+  updateSprint: async (id, data) => {
+    await api.updateSprint(id, data);
+    const pid = get().selectedProjectId;
+    if (pid) await get().loadSprints(pid);
+  },
+  deleteSprint: async (id) => {
+    await api.deleteSprint(id);
+    const pid = get().selectedProjectId;
+    if (pid) {
+      await get().loadSprints(pid);
+      await get().loadTasks(pid);
+    }
   },
 
   // Artifact CRUD

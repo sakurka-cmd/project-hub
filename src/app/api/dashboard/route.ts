@@ -7,8 +7,11 @@ export async function GET() {
       totalProjects,
       activeProjectsCount,
       tasksByStatus,
+      tasksByType,
       recentTasks,
       criticalTasks,
+      activeSprints,
+      recentSprints,
     ] = await Promise.all([
       // Total projects
       db.project.count(),
@@ -19,6 +22,12 @@ export async function GET() {
       // Tasks grouped by status
       db.task.groupBy({
         by: ['status'],
+        _count: { id: true },
+      }),
+
+      // Tasks grouped by work item type
+      db.task.groupBy({
+        by: ['workItemType'],
         _count: { id: true },
       }),
 
@@ -48,6 +57,18 @@ export async function GET() {
         },
         orderBy: { updatedAt: 'desc' },
       }),
+
+      // Active sprints count
+      db.sprint.count({ where: { status: 'active' } }),
+
+      // 5 most recent sprints
+      db.sprint.findMany({
+        take: 5,
+        orderBy: { updatedAt: 'desc' },
+        include: {
+          _count: { select: { tasks: true } },
+        },
+      }),
     ])
 
     // Format tasksByStatus into a clean object
@@ -63,6 +84,19 @@ export async function GET() {
       tasksByStatusMap[group.status] = group._count.id
     }
 
+    // Format tasksByType
+    const tasksByTypeMap: Record<string, number> = {
+      epic: 0,
+      feature: 0,
+      userStory: 0,
+      bug: 0,
+      task: 0,
+    }
+
+    for (const group of tasksByType) {
+      tasksByTypeMap[group.workItemType] = group._count.id
+    }
+
     // Compute total tasks
     const totalTasks = Object.values(tasksByStatusMap).reduce((sum, count) => sum + count, 0)
 
@@ -71,9 +105,12 @@ export async function GET() {
       activeProjectsCount,
       totalTasks,
       tasksByStatus: tasksByStatusMap,
+      tasksByType: tasksByTypeMap,
       recentTasks,
       criticalTasks: criticalTasks.length,
       criticalTasksList: criticalTasks,
+      activeSprints,
+      recentSprints,
     })
   } catch (error) {
     console.error('Error fetching dashboard stats:', error)

@@ -18,11 +18,12 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tasks             Task[]
-  categories        TaskCategory[]
-  artifacts         Artifact[]
-  credentials       Credential[]
-  infrastructure    InfrastructureItem[]
+  tasks          Task[]
+  categories     TaskCategory[]
+  artifacts      Artifact[]
+  credentials    Credential[]
+  infrastructure InfrastructureItem[]
+  sprints        Sprint[]
 }
 
 // ==================== КАТЕГОРИИ ЗАДАЧ ====================
@@ -38,22 +39,45 @@ model TaskCategory {
   tasks   Task[]
 }
 
+// ==================== СПРИНТЫ ====================
+
+model Sprint {
+  id        String    @id @default(cuid())
+  name      String
+  startDate DateTime?
+  endDate   DateTime?
+  status    String    @default("planning") // planning, active, completed
+  projectId String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+}
+
 // ==================== ЗАДАЧИ ====================
 
 model Task {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  status      String   @default("todo") // todo, in_progress, review, done, cancelled
-  priority    String   @default("medium") // low, medium, high, critical
-  projectId   String
-  categoryId  String?
-  dueDate     DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  status       String   @default("todo") // todo, in_progress, review, done, cancelled
+  priority     String   @default("medium") // low, medium, high, critical
+  workItemType String   @default("task") // epic, feature, userStory, bug, task
+  parentId     String?
+  sprintId     String?
+  order        Int      @default(0)
+  projectId    String
+  categoryId   String?
+  dueDate      DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   category  TaskCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sprint    Sprint?      @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  parent    Task?        @relation("TaskHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Task[]       @relation("TaskHierarchy")
 }
 
 // ==================== АРТЕФАКТЫ ====================

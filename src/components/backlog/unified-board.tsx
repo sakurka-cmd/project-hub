@@ -9,11 +9,8 @@ import {
   PRIORITY_LABELS,
   PRIORITY_COLORS,
   WORK_ITEM_TYPE_LABELS,
-  WORK_ITEM_TYPE_COLORS,
   WORK_ITEM_TYPE_PREFIX,
-  TASK_STATUSES,
-  SPRINT_STATUS_LABELS,
-  SPRINT_STATUS_COLORS,
+  WORK_ITEM_TYPES,
   getShortId,
 } from '@/lib/constants';
 import {
@@ -24,12 +21,15 @@ import {
   CheckSquare,
   ChevronRight,
   ChevronLeft,
+  Plus,
+  FolderKanban,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TaskDetailPane } from '@/components/tasks/task-detail-pane';
 import { CreateTaskInline } from '@/components/tasks/create-task-inline';
 import { cn } from '@/lib/utils';
@@ -55,28 +55,73 @@ function getTypeIconColor(type: string): string {
   }
 }
 
-const AZURE_STATUSES = [
+const BOARD_STATUSES = [
   { key: 'todo', label: 'Новые' },
   { key: 'in_progress', label: 'Активные' },
   { key: 'review', label: 'Решены' },
-  { key: 'done', label: 'Закрыты' },
+  { key: 'done', label: 'Закрытые' },
 ] as const;
 
-export function BoardView() {
+export function UnifiedBoard() {
   const tasks = useAppStore(s => s.tasks);
   const sprints = useAppStore(s => s.sprints);
-  const selectedProjectId = useAppStore(s => s.selectedProjectId);
+  const projects = useAppStore(s => s.projects);
   const updateTask = useAppStore(s => s.updateTask);
+  const selectProjectContext = useAppStore(s => s.selectProjectContext);
   const loading = useAppStore(s => s.loading);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [paneOpen, setPaneOpen] = useState(false);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [sprintFilter, setSprintFilter] = useState<string | null>(null);
+  const [addTaskProjectId, setAddTaskProjectId] = useState<string | null>(null);
 
-  // Only leaf-level tasks (no children) are shown on the board
-  const leafTasks = useMemo(() => {
-    const parentIds = new Set(tasks.filter(t => t.children && t.children.length > 0).map(t => t.id));
-    return tasks.filter(t => !parentIds.has(t.id));
+  // Flatten all tasks (root + children) to get leaf tasks for the board
+  const allLeafTasks = useMemo(() => {
+    const parentIds = new Set<string>();
+    // Collect all IDs that have children
+    const collectParentIds = (taskList: Task[]) => {
+      for (const t of taskList) {
+        if (t.children && t.children.length > 0) {
+          parentIds.add(t.id);
+          collectParentIds(t.children);
+        }
+      }
+    };
+    collectParentIds(tasks);
+    // Return only leaf tasks
+    const leaves: Task[] = [];
+    const collectLeaves = (taskList: Task[]) => {
+      for (const t of taskList) {
+        if (!parentIds.has(t.id)) {
+          leaves.push(t);
+        }
+        if (t.children) collectLeaves(t.children);
+      }
+    };
+    collectLeaves(tasks);
+    return leaves;
   }, [tasks]);
+
+  // Apply filters
+  const filteredTasks = useMemo(() => {
+    let result = allLeafTasks;
+    if (projectFilter) result = result.filter(t => t.projectId === projectFilter);
+    if (typeFilter) result = result.filter(t => t.workItemType === typeFilter);
+    if (sprintFilter) result = result.filter(t => t.sprintId === sprintFilter);
+    return result;
+  }, [allLeafTasks, projectFilter, typeFilter, sprintFilter]);
+
+  // Group filtered tasks by project for section headers
+  const tasksByProject = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const t of filteredTasks) {
+      if (!map.has(t.projectId)) map.set(t.projectId, []);
+      map.get(t.projectId)!.push(t);
+    }
+    return map;
+  }, [filteredTasks]);
 
   const statusFlow: Record<string, string | null> = {
     todo: 'in_progress',
@@ -101,12 +146,13 @@ export function BoardView() {
     }
   };
 
-  const handleSelect = (task: Task) => {
+  const handleSelect = async (task: Task) => {
+    await selectProjectContext(task.projectId);
     setSelectedTask(task);
     setPaneOpen(true);
   };
 
-  if (loading) {
+  if (loading && projects.length === 0) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-full rounded-lg" />
@@ -119,32 +165,32 @@ export function BoardView() {
     );
   }
 
-  const renderSprintSection = (sprintId: string | null, sprintName: string) => {
-    const sprintTasks = sprintId
-      ? leafTasks.filter(t => t.sprintId === sprintId)
-      : leafTasks.filter(t => !t.sprintId);
-
-    if (sprintTasks.length === 0) return null;
+  const renderProjectSection = (projectId: string, projectTasks: Task[]) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project || projectTasks.length === 0) return null;
 
     return (
-      <div key={sprintId || 'none'} className="space-y-3">
-        {/* Sprint header */}
+      <div key={projectId} className="space-y-3">
+        {/* Project header */}
         <div className="flex items-center gap-2">
           <div className="h-px flex-1 bg-border" />
-          <Badge variant="outline" className="text-xs font-medium shrink-0">
-            {sprintName}
-          </Badge>
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-            {sprintTasks.length}
-          </Badge>
+          <div className="flex items-center gap-2 shrink-0">
+            <span
+              className="h-3 w-3 rounded-full shrink-0"
+              style={{ backgroundColor: project.color }}
+            />
+            <span className="text-sm font-semibold">{project.name}</span>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+              {projectTasks.length}
+            </Badge>
+          </div>
           <div className="h-px flex-1 bg-border" />
         </div>
 
         {/* Kanban columns */}
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          {AZURE_STATUSES.map(status => {
-            const columnTasks = sprintTasks.filter(t => t.status === status.key);
-            const prefix = '';
+          {BOARD_STATUSES.map(status => {
+            const columnTasks = projectTasks.filter(t => t.status === status.key);
 
             return (
               <div key={status.key} className="flex flex-col rounded-lg border bg-muted/20 min-h-[120px]">
@@ -196,6 +242,11 @@ export function BoardView() {
                               >
                                 {PRIORITY_LABELS[task.priority]}
                               </Badge>
+                              {task.sprint && (
+                                <span className="text-[9px] text-muted-foreground truncate">
+                                  {task.sprint.name}
+                                </span>
+                              )}
                             </div>
                             {/* Status navigation */}
                             <div className="flex items-center gap-0.5 pt-0.5">
@@ -233,42 +284,123 @@ export function BoardView() {
     );
   };
 
-  const activeSprints = sprints.filter(s => s.status === 'active');
-  const otherSprints = sprints.filter(s => s.status !== 'active' && s.status !== 'completed');
-
   return (
-    <div className="space-y-6">
-      {/* Kanban board with sprint swimlanes */}
-      {activeSprints.length > 0 && activeSprints.map(s => renderSprintSection(s.id, s.name))}
+    <div className="space-y-4">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Доска</h1>
+        <p className="text-muted-foreground">
+          Канбан-доска по всем проектам
+        </p>
+      </div>
 
-      {/* Other non-completed sprints */}
-      {otherSprints.length > 0 && otherSprints.map(s => renderSprintSection(s.id, s.name))}
+      {/* Filter bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border bg-muted/20 p-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Project filter */}
+          <select
+            value={projectFilter || ''}
+            onChange={e => setProjectFilter(e.target.value || null)}
+            className="h-7 rounded-md border bg-background px-2 text-xs"
+          >
+            <option value="">Все проекты</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
 
-      {/* No sprint */}
-      {renderSprintSection(null, 'Без спринта')}
+          {/* Type filter */}
+          <select
+            value={typeFilter || ''}
+            onChange={e => setTypeFilter(e.target.value || null)}
+            className="h-7 rounded-md border bg-background px-2 text-xs"
+          >
+            <option value="">Все типы</option>
+            {WORK_ITEM_TYPES.map(t => (
+              <option key={t} value={t}>{WORK_ITEM_TYPE_LABELS[t]}</option>
+            ))}
+          </select>
 
-      {/* Completed sprints */}
-      {sprints.filter(s => s.status === 'completed').map(s => renderSprintSection(s.id, s.name))}
+          {/* Sprint filter */}
+          {sprints.length > 0 && (
+            <select
+              value={sprintFilter || ''}
+              onChange={e => setSprintFilter(e.target.value || null)}
+              className="h-7 rounded-md border bg-background px-2 text-xs"
+            >
+              <option value="">Все спринты</option>
+              {sprints.map(s => {
+                const proj = projects.find(p => p.id === s.projectId);
+                return (
+                  <option key={s.id} value={s.id}>
+                    {proj ? `${proj.name} — ` : ''}{s.name}
+                  </option>
+                );
+              })}
+            </select>
+          )}
+        </div>
+      </div>
+
+      {/* Board sections grouped by project */}
+      <div className="space-y-6">
+        {/* When no project filter, show sections grouped by project */}
+        {!projectFilter ? (
+          <>
+            {/* Sort projects: active first */}
+            {[...projects]
+              .sort((a, b) => {
+                if (a.status === 'active' && b.status !== 'active') return -1;
+                if (a.status !== 'active' && b.status === 'active') return 1;
+                return 0;
+              })
+              .map(p => renderProjectSection(p.id, tasksByProject.get(p.id) || []))
+            }
+          </>
+        ) : (
+          renderProjectSection(projectFilter, tasksByProject.get(projectFilter) || [])
+        )}
+      </div>
 
       {/* Empty state */}
-      {leafTasks.length === 0 && (
+      {filteredTasks.length === 0 && projects.length > 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center rounded-lg border bg-card">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
             <CheckSquare className="h-6 w-6 text-muted-foreground" />
           </div>
           <p className="text-sm text-muted-foreground">
-            Нет элементов для отображения на доске
+            Нет элементов для отображения
           </p>
         </div>
       )}
 
-      {/* Bottom add */}
-      {selectedProjectId && (
-        <div className="rounded-lg border bg-card p-2">
-          <CreateTaskInline
-            projectId={selectedProjectId}
-            placeholder="Быстрое добавление задачи..."
-          />
+      {/* Quick add */}
+      {projects.length > 0 && (
+        <div className="rounded-lg border bg-card p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-muted-foreground">Быстрое добавление в проект:</span>
+            <Select value={addTaskProjectId || ''} onValueChange={setAddTaskProjectId}>
+              <SelectTrigger className="h-7 w-48 text-xs">
+                <SelectValue placeholder="Выберите проект" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map(p => (
+                  <SelectItem key={p.id} value={p.id}>
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+                      {p.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {addTaskProjectId && (
+            <CreateTaskInline
+              projectId={addTaskProjectId}
+              placeholder="Быстрое добавление задачи..."
+            />
+          )}
         </div>
       )}
 

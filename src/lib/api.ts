@@ -1,6 +1,6 @@
 import type {
   Project, Task, TaskCategory, Artifact, Credential,
-  InfrastructureItem, DashboardStats, Sprint
+  InfrastructureItem, DashboardStats, Sprint, AllDataResponse
 } from '@/types';
 
 const BASE = '/api';
@@ -15,6 +15,9 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   // Dashboard
   getDashboard: () => fetchJSON<DashboardStats>(`${BASE}/dashboard`),
+
+  // All data (unified)
+  getAllData: () => fetchJSON<AllDataResponse>(`${BASE}/all-data`),
 
   // Projects
   getProjects: () => fetchJSON<Project[]>(`${BASE}/projects`),

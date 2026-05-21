@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAppStore } from '@/lib/store';
 import type { Task } from '@/types';
 import {
@@ -54,13 +54,23 @@ interface TaskDetailPaneProps {
 }
 
 export function TaskDetailPane({ open, onOpenChange, task }: TaskDetailPaneProps) {
-  const categories = useAppStore(s => s.categories);
-  const sprints = useAppStore(s => s.sprints);
+  const allSprints = useAppStore(s => s.sprints);
+  const allCategories = useAppStore(s => s.categories);
   const updateTask = useAppStore(s => s.updateTask);
   const deleteTask = useAppStore(s => s.deleteTask);
   const createTask = useAppStore(s => s.createTask);
-  const selectedProjectId = useAppStore(s => s.selectedProjectId);
   const { toast } = useToast();
+
+  // Filter sprints and categories by the task's project
+  const sprints = useMemo(() => {
+    if (!task) return [];
+    return allSprints.filter(s => s.projectId === task.projectId);
+  }, [allSprints, task]);
+
+  const categories = useMemo(() => {
+    if (!task) return [];
+    return allCategories.filter(c => c.projectId === task.projectId);
+  }, [allCategories, task]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -130,12 +140,12 @@ export function TaskDetailPane({ open, onOpenChange, task }: TaskDetailPaneProps
   };
 
   const handleAddChild = async () => {
-    if (!task || !childTitle.trim() || !selectedProjectId) return;
+    if (!task || !childTitle.trim()) return;
     try {
       const childType = CHILD_TYPE_FOR_PARENT[task.workItemType] || 'task';
       await createTask({
         title: childTitle.trim(),
-        projectId: selectedProjectId,
+        projectId: task.projectId,
         parentId: task.id,
         workItemType: childType,
         status: 'todo',

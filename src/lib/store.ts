@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Project, DashboardStats, AppView, ProjectTab, Task, TaskCategory, Artifact, Credential, InfrastructureItem, Sprint } from '@/types';
+import type { Project, DashboardStats, AppView, Task, TaskCategory, Artifact, Credential, InfrastructureItem, Sprint } from '@/types';
 import { api } from '@/lib/api';
 
 interface AppState {
@@ -9,34 +9,30 @@ interface AppState {
   view: AppView;
   setView: (v: AppView) => void;
   selectedProjectId: string | null;
-  selectProject: (id: string) => void;
-  projectTab: ProjectTab;
-  setProjectTab: (t: ProjectTab) => void;
+  selectProjectContext: (id: string) => Promise<void>;
+  expandedProjects: Set<string>;
+  toggleProject: (id: string) => void;
 
-  // Data
-  dashboard: DashboardStats | null;
+  // Data (unified — loaded once)
   projects: Project[];
-  currentProject: Project | null;
   tasks: Task[];
+  sprints: Sprint[];
   categories: TaskCategory[];
   artifacts: Artifact[];
   credentials: Credential[];
   infrastructure: InfrastructureItem[];
-  sprints: Sprint[];
+
+  // Dashboard
+  dashboard: DashboardStats | null;
 
   // Loading
   loading: boolean;
+  allDataLoaded: boolean;
 
   // Actions
   loadDashboard: () => Promise<void>;
-  loadProjects: () => Promise<void>;
-  loadProjectDetail: (id: string) => Promise<void>;
-  loadTasks: (projectId: string) => Promise<void>;
-  loadCategories: (projectId: string) => Promise<void>;
-  loadArtifacts: (projectId: string) => Promise<void>;
-  loadCredentials: (projectId: string) => Promise<void>;
-  loadInfrastructure: (projectId: string) => Promise<void>;
-  loadSprints: (projectId: string) => Promise<void>;
+  loadAllData: () => Promise<void>;
+  loadProjectContext: (id: string) => Promise<void>;
 
   // Task actions
   createTask: (data: Partial<Task> & { projectId: string }) => Promise<void>;
@@ -78,25 +74,32 @@ export const useAppStore = create<AppState>((set, get) => ({
   view: 'dashboard',
   setView: (v) => set({ view: v }),
   selectedProjectId: null,
-  selectProject: (id) => {
-    set({ selectedProjectId: id, view: 'project-detail' });
-    get().loadProjectDetail(id);
+  selectProjectContext: async (id) => {
+    set({ selectedProjectId: id });
+    await get().loadProjectContext(id);
   },
-  projectTab: 'backlog',
-  setProjectTab: (t) => set({ projectTab: t }),
+  expandedProjects: new Set<string>(),
+  toggleProject: (id) => {
+    set((s) => {
+      const next = new Set(s.expandedProjects);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return { expandedProjects: next };
+    });
+  },
 
   // Data
-  dashboard: null,
   projects: [],
-  currentProject: null,
   tasks: [],
+  sprints: [],
   categories: [],
   artifacts: [],
   credentials: [],
   infrastructure: [],
-  sprints: [],
 
+  dashboard: null,
   loading: false,
+  allDataLoaded: false,
 
   // Loaders
   loadDashboard: async () => {
@@ -106,198 +109,142 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) { console.error(e); }
   },
 
-  loadProjects: async () => {
+  loadAllData: async () => {
     set({ loading: true });
     try {
-      const data = await api.getProjects();
-      set({ projects: data, loading: false });
-    } catch (e) { set({ loading: false }); console.error(e); }
-  },
-
-  loadProjectDetail: async (id: string) => {
-    set({ loading: true });
-    try {
-      const [project, tasks, categories, artifacts, credentials, infrastructure, sprints] = await Promise.all([
-        api.getProject(id),
-        api.getTasks({ projectId: id }),
-        api.getCategories(id),
-        api.getArtifacts(id),
-        api.getCredentials(id),
-        api.getInfrastructure(id),
-        api.getSprints(id),
-      ]);
+      const data = await api.getAllData();
       set({
-        currentProject: project,
-        tasks: tasks,
-        categories: categories,
-        artifacts: artifacts,
-        credentials: credentials,
-        infrastructure: infrastructure,
-        sprints: sprints,
+        projects: data.projects,
+        tasks: data.tasks,
+        sprints: data.sprints,
+        categories: data.categories,
+        artifacts: data.artifacts,
+        credentials: data.credentials,
+        infrastructure: data.infrastructure,
         loading: false,
+        allDataLoaded: true,
       });
     } catch (e) { set({ loading: false }); console.error(e); }
   },
 
-  loadTasks: async (projectId: string) => {
+  loadProjectContext: async (id: string) => {
     try {
-      const data = await api.getTasks({ projectId });
-      set({ tasks: data });
-    } catch (e) { console.error(e); }
-  },
-
-  loadCategories: async (projectId: string) => {
-    try {
-      const data = await api.getCategories(projectId);
-      set({ categories: data });
-    } catch (e) { console.error(e); }
-  },
-
-  loadArtifacts: async (projectId: string) => {
-    try {
-      const data = await api.getArtifacts(projectId);
-      set({ artifacts: data });
-    } catch (e) { console.error(e); }
-  },
-
-  loadCredentials: async (projectId: string) => {
-    try {
-      const data = await api.getCredentials(projectId);
-      set({ credentials: data });
-    } catch (e) { console.error(e); }
-  },
-
-  loadInfrastructure: async (projectId: string) => {
-    try {
-      const data = await api.getInfrastructure(projectId);
-      set({ infrastructure: data });
-    } catch (e) { console.error(e); }
-  },
-
-  loadSprints: async (projectId: string) => {
-    try {
-      const data = await api.getSprints(projectId);
-      set({ sprints: data });
+      const [artifacts, credentials, infrastructure] = await Promise.all([
+        api.getArtifacts(id),
+        api.getCredentials(id),
+        api.getInfrastructure(id),
+      ]);
+      set({ artifacts, credentials, infrastructure, selectedProjectId: id });
     } catch (e) { console.error(e); }
   },
 
   // Task CRUD
   createTask: async (data) => {
     await api.createTask(data);
-    const pid = data.projectId || get().selectedProjectId;
-    if (pid) await get().loadTasks(pid);
+    await get().loadAllData();
     await get().loadDashboard();
   },
   updateTask: async (id, data) => {
     await api.updateTask(id, data);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadTasks(pid);
+    await get().loadAllData();
     await get().loadDashboard();
   },
   deleteTask: async (id) => {
     await api.deleteTask(id);
-    const pid = get().selectedProjectId;
-    if (pid) {
-      await get().loadTasks(pid);
-      await get().loadSprints(pid);
-    }
+    await get().loadAllData();
     await get().loadDashboard();
   },
 
   // Project CRUD
   createProject: async (data) => {
     await api.createProject(data);
-    await get().loadProjects();
+    await get().loadAllData();
     await get().loadDashboard();
   },
   updateProject: async (id, data) => {
     await api.updateProject(id, data);
-    await get().loadProjects();
+    await get().loadAllData();
     await get().loadDashboard();
-    if (get().selectedProjectId === id) await get().loadProjectDetail(id);
   },
   deleteProject: async (id) => {
     await api.deleteProject(id);
-    set({ view: 'projects', selectedProjectId: null, currentProject: null });
-    await get().loadProjects();
+    set({ selectedProjectId: null });
+    await get().loadAllData();
     await get().loadDashboard();
   },
 
   // Category CRUD
   createCategory: async (data) => {
     await api.createCategory(data);
-    await get().loadCategories(data.projectId);
+    await get().loadAllData();
   },
   deleteCategory: async (id) => {
     await api.deleteCategory(id);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadCategories(pid);
+    await get().loadAllData();
   },
 
   // Sprint CRUD
   createSprint: async (data) => {
     await api.createSprint(data);
-    await get().loadSprints(data.projectId);
+    await get().loadAllData();
   },
   updateSprint: async (id, data) => {
     await api.updateSprint(id, data);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadSprints(pid);
+    await get().loadAllData();
   },
   deleteSprint: async (id) => {
     await api.deleteSprint(id);
-    const pid = get().selectedProjectId;
-    if (pid) {
-      await get().loadSprints(pid);
-      await get().loadTasks(pid);
-    }
+    await get().loadAllData();
   },
 
   // Artifact CRUD
   createArtifact: async (data) => {
     await api.createArtifact(data);
-    await get().loadArtifacts(data.projectId);
+    const pid = data.projectId || get().selectedProjectId;
+    if (pid) await get().loadProjectContext(pid);
   },
   updateArtifact: async (id, data) => {
     await api.updateArtifact(id, data);
     const pid = get().selectedProjectId;
-    if (pid) await get().loadArtifacts(pid);
+    if (pid) await get().loadProjectContext(pid);
   },
   deleteArtifact: async (id) => {
     await api.deleteArtifact(id);
     const pid = get().selectedProjectId;
-    if (pid) await get().loadArtifacts(pid);
+    if (pid) await get().loadProjectContext(pid);
   },
 
   // Credential CRUD
   createCredential: async (data) => {
     await api.createCredential(data);
-    await get().loadCredentials(data.projectId);
+    const pid = data.projectId || get().selectedProjectId;
+    if (pid) await get().loadProjectContext(pid);
   },
   updateCredential: async (id, data) => {
     await api.updateCredential(id, data);
     const pid = get().selectedProjectId;
-    if (pid) await get().loadCredentials(pid);
+    if (pid) await get().loadProjectContext(pid);
   },
   deleteCredential: async (id) => {
     await api.deleteCredential(id);
     const pid = get().selectedProjectId;
-    if (pid) await get().loadCredentials(pid);
+    if (pid) await get().loadProjectContext(pid);
   },
 
   // Infrastructure CRUD
   createInfrastructure: async (data) => {
     await api.createInfrastructure(data);
-    await get().loadInfrastructure(data.projectId);
+    const pid = data.projectId || get().selectedProjectId;
+    if (pid) await get().loadProjectContext(pid);
   },
   updateInfrastructure: async (id, data) => {
     await api.updateInfrastructure(id, data);
     const pid = get().selectedProjectId;
-    if (pid) await get().loadInfrastructure(pid);
+    if (pid) await get().loadProjectContext(pid);
   },
   deleteInfrastructure: async (id) => {
     await api.deleteInfrastructure(id);
     const pid = get().selectedProjectId;
-    if (pid) await get().loadInfrastructure(pid);
+    if (pid) await get().loadProjectContext(pid);
   },
 }));

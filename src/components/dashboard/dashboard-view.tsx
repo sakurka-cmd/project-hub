@@ -54,8 +54,8 @@ function getTypeIconColor(type: string): string {
 
 export function DashboardView() {
   const dashboard = useAppStore(s => s.dashboard);
-  const selectProject = useAppStore(s => s.selectProject);
   const setView = useAppStore(s => s.setView);
+  const toggleProject = useAppStore(s => s.toggleProject);
 
   if (!dashboard) {
     return (
@@ -127,6 +127,16 @@ export function DashboardView() {
     0
   );
 
+  const handleNavigateToTask = (projectId: string) => {
+    // Expand the project in the backlog and navigate there
+    setView('backlog');
+    // Toggle to expand if not already
+    const store = useAppStore.getState();
+    if (!store.expandedProjects.has(projectId)) {
+      toggleProject(projectId);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -172,7 +182,7 @@ export function DashboardView() {
                 <div
                   key={task.id}
                   className="flex items-start gap-3 rounded-lg p-2.5 hover:bg-muted/50 transition-colors cursor-pointer"
-                  onClick={() => selectProject(task.projectId)}
+                  onClick={() => handleNavigateToTask(task.projectId)}
                 >
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-1.5">
@@ -212,9 +222,9 @@ export function DashboardView() {
                   variant="ghost"
                   size="sm"
                   className="w-full text-muted-foreground"
-                  onClick={() => setView('projects')}
+                  onClick={() => setView('backlog')}
                 >
-                  Все проекты
+                  Открыть бэклог
                   <ArrowRight className="h-4 w-4 ml-1" />
                 </Button>
               </>
@@ -258,7 +268,7 @@ export function DashboardView() {
                     <div
                       key={task.id}
                       className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded p-1.5"
-                      onClick={() => selectProject(task.projectId)}
+                      onClick={() => handleNavigateToTask(task.projectId)}
                     >
                       <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0" />
                       <span className="truncate">{task.title}</span>

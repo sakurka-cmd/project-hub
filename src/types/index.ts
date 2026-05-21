@@ -7,6 +7,7 @@ export interface Project {
   color: string;
   createdAt: string;
   updatedAt: string;
+  taskCount?: number;
   _count?: { tasks: number };
   categories?: TaskCategory[];
   tasks?: Task[];
@@ -120,6 +121,15 @@ export interface DashboardStats {
 }
 
 // ==================== APP STATE ====================
-export type AppView = 'dashboard' | 'projects' | 'project-detail';
-export type ProjectTab = 'backlog' | 'board' | 'sprints' | 'artifacts' | 'credentials' | 'infrastructure';
-export type TaskSubView = 'backlog' | 'board';
+export type AppView = 'dashboard' | 'backlog' | 'board';
+
+// ==================== UNIFIED DATA RESPONSE ====================
+export interface AllDataResponse {
+  projects: Project[];
+  tasks: Task[];
+  sprints: Sprint[];
+  categories: TaskCategory[];
+  artifacts: Artifact[];
+  credentials: Credential[];
+  infrastructure: InfrastructureItem[];
+}

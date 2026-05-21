@@ -5,12 +5,10 @@ import { useAppStore } from '@/lib/store';
 import { AppShell } from '@/components/app-shell';
 
 export default function Home() {
-  const loadDashboard = useAppStore(s => s.loadDashboard);
-  const loadProjects = useAppStore(s => s.loadProjects);
+  const loadAllData = useAppStore(s => s.loadAllData);
 
   useEffect(() => {
-    loadDashboard();
-    loadProjects();
+    loadAllData();
   }, []);
 
   return <AppShell />;

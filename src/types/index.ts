@@ -106,22 +106,8 @@ export interface InfrastructureItem {
   project?: Project;
 }
 
-// ==================== DASHBOARD ====================
-export interface DashboardStats {
-  totalProjects: number;
-  activeProjectsCount: number;
-  totalTasks: number;
-  tasksByStatus: Record<string, number>;
-  tasksByType: Record<string, number>;
-  recentTasks: Task[];
-  criticalTasks: number;
-  criticalTasksList: Task[];
-  activeSprints: number;
-  recentSprints: Sprint[];
-}
-
 // ==================== APP STATE ====================
-export type AppView = 'dashboard' | 'backlog' | 'board';
+export type AppView = 'backlog';
 
 // ==================== UNIFIED DATA RESPONSE ====================
 export interface AllDataResponse {

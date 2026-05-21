@@ -63,7 +63,7 @@ interface ArtifactDialogProps {
   artifact?: Artifact | null;
 }
 
-function ArtifactDialog({ open, onOpenChange, mode, artifact }: ArtifactDialogProps) {
+export function ArtifactDialog({ open, onOpenChange, mode, artifact }: ArtifactDialogProps) {
   const selectedProjectId = useAppStore(s => s.selectedProjectId);
   const createArtifact = useAppStore(s => s.createArtifact);
   const updateArtifact = useAppStore(s => s.updateArtifact);

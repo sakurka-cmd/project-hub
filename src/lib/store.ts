@@ -1,13 +1,12 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Project, DashboardStats, AppView, Task, TaskCategory, Artifact, Credential, InfrastructureItem, Sprint } from '@/types';
+import type { Project, AppView, Task, TaskCategory, Artifact, Credential, InfrastructureItem, Sprint } from '@/types';
 import { api } from '@/lib/api';
 
 interface AppState {
   // Navigation
   view: AppView;
-  setView: (v: AppView) => void;
   selectedProjectId: string | null;
   selectProjectContext: (id: string) => Promise<void>;
   expandedProjects: Set<string>;
@@ -22,15 +21,11 @@ interface AppState {
   credentials: Credential[];
   infrastructure: InfrastructureItem[];
 
-  // Dashboard
-  dashboard: DashboardStats | null;
-
   // Loading
   loading: boolean;
   allDataLoaded: boolean;
 
   // Actions
-  loadDashboard: () => Promise<void>;
   loadAllData: () => Promise<void>;
   loadProjectContext: (id: string) => Promise<void>;
 
@@ -71,8 +66,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Navigation
-  view: 'dashboard',
-  setView: (v) => set({ view: v }),
+  view: 'backlog',
   selectedProjectId: null,
   selectProjectContext: async (id) => {
     set({ selectedProjectId: id });
@@ -97,18 +91,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   credentials: [],
   infrastructure: [],
 
-  dashboard: null,
   loading: false,
   allDataLoaded: false,
 
   // Loaders
-  loadDashboard: async () => {
-    try {
-      const data = await api.getDashboard();
-      set({ dashboard: data });
-    } catch (e) { console.error(e); }
-  },
-
   loadAllData: async () => {
     set({ loading: true });
     try {
@@ -142,35 +128,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   createTask: async (data) => {
     await api.createTask(data);
     await get().loadAllData();
-    await get().loadDashboard();
   },
   updateTask: async (id, data) => {
     await api.updateTask(id, data);
     await get().loadAllData();
-    await get().loadDashboard();
   },
   deleteTask: async (id) => {
     await api.deleteTask(id);
     await get().loadAllData();
-    await get().loadDashboard();
   },
 
   // Project CRUD
   createProject: async (data) => {
     await api.createProject(data);
     await get().loadAllData();
-    await get().loadDashboard();
   },
   updateProject: async (id, data) => {
     await api.updateProject(id, data);
     await get().loadAllData();
-    await get().loadDashboard();
   },
   deleteProject: async (id) => {
     await api.deleteProject(id);
     set({ selectedProjectId: null });
     await get().loadAllData();
-    await get().loadDashboard();
   },
 
   // Category CRUD

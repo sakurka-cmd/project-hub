@@ -7,7 +7,6 @@ skills
 download
 mini-services
 telegram-bot.ts
-src
 *.log
 .env
 .env.local

@@ -1,5 +1,3 @@
-node_modules
-.next
 .git
 *.md
 !prisma/
@@ -13,3 +11,15 @@ telegram-bot.ts
 test
 examples
 .zscripts
+src
+package.json
+bun.lock
+Dockerfile.full
+deploy.sh
+components.json
+tsconfig.json
+next.config.ts
+postcss.config.mjs
+tailwind.config.ts
+eslint.config.mjs
+worklog.md

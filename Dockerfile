@@ -4,13 +4,13 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production
+RUN bun install --frozen-lockfile
 
 COPY prisma ./prisma/
 RUN bunx prisma generate
 
 COPY . .
-RUN rm -rf src && bun run build
+RUN bun run build
 
 # standalone already has its own node_modules
 RUN cp -r .next/static .next/standalone/.next/static 2>/dev/null; \

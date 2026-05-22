@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+*.md
+!prisma/
+skills
+download
+mini-services
+telegram-bot.ts
+src
+*.log
+.env
+.env.local
+test
+examples
+.zscripts

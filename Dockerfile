@@ -1,31 +1,10 @@
-FROM oven/bun:1-alpine AS builder
-WORKDIR /app
-
-RUN apk add --no-cache libc6-compat
-
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
-
-COPY prisma ./prisma/
-RUN bunx prisma generate
-
-COPY . .
-RUN bun run build
-
-# standalone already has its own node_modules
-RUN cp -r .next/static .next/standalone/.next/static 2>/dev/null; \
-    cp -r public .next/standalone/ 2>/dev/null; \
-    cp -r prisma .next/standalone/ 2>/dev/null; \
-    cp -r node_modules/.prisma .next/standalone/node_modules/.prisma 2>/dev/null; \
-    cp -r node_modules/prisma .next/standalone/node_modules/prisma 2>/dev/null; \
-    cp -r node_modules/@prisma .next/standalone/node_modules/@prisma 2>/dev/null
-
+# Runtime-only image — build on host with ./deploy.sh, then docker compose up
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/prisma ./prisma/
+COPY .next/standalone/ ./
+COPY prisma/ ./prisma/
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs && \

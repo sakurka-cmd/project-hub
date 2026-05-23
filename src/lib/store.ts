@@ -57,6 +57,26 @@ interface AppState {
   deleteNode: (id: string) => Promise<void>;
 }
 
+// Check if an error is caused by an invalid/missing session
+function isAuthError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes('Не авторизован') || msg.includes('API error: 401');
+}
+
+// Wrap an async action with session expiry handling
+async function withAuthCheck<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isAuthError(err)) {
+      // Session expired or invalid — redirect to login
+      await signOut({ callbackUrl: '/login' });
+      throw new Error('Сессия истекла. Войдите заново.');
+    }
+    throw err;
+  }
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Navigation
   selectedProjectId: null,
@@ -94,41 +114,45 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadAllData: async () => {
     set({ loading: true });
     try {
-      const data = await api.getAllData();
+      const data = await withAuthCheck(() => api.getAllData());
       set({
         projects: data.projects,
         nodes: data.nodes,
         loading: false,
       });
-    } catch (e) { set({ loading: false }); console.error(e); }
+    } catch (e) {
+      set({ loading: false });
+      console.error('loadAllData error:', e);
+      throw e;
+    }
   },
 
   // Project CRUD
   createProject: async (data) => {
-    await api.createProject(data);
+    await withAuthCheck(() => api.createProject(data));
     await get().loadAllData();
   },
   updateProject: async (id, data) => {
-    await api.updateProject(id, data);
+    await withAuthCheck(() => api.updateProject(id, data));
     await get().loadAllData();
   },
   deleteProject: async (id) => {
-    await api.deleteProject(id);
+    await withAuthCheck(() => api.deleteProject(id));
     set({ selectedProjectId: null });
     await get().loadAllData();
   },
 
   // Node CRUD
   createNode: async (data) => {
-    await api.createNode(data);
+    await withAuthCheck(() => api.createNode(data));
     await get().loadAllData();
   },
   updateNode: async (id, data) => {
-    await api.updateNode(id, data);
+    await withAuthCheck(() => api.updateNode(id, data));
     await get().loadAllData();
   },
   deleteNode: async (id) => {
-    await api.deleteNode(id);
+    await withAuthCheck(() => api.deleteNode(id));
     await get().loadAllData();
   },
 }));

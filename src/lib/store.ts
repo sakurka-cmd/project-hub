@@ -1,78 +1,61 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Project, AppView, Task, TaskCategory, Artifact, Credential, InfrastructureItem, Sprint } from '@/types';
+import type { Project, ProjectNode } from '@/types';
 import { api } from '@/lib/api';
 
 interface AppState {
   // Navigation
-  view: AppView;
   selectedProjectId: string | null;
-  selectProjectContext: (id: string) => Promise<void>;
   expandedProjects: Set<string>;
+  selectProject: (id: string) => void;
   toggleProject: (id: string) => void;
 
-  // Data (unified — loaded once)
+  // Data
   projects: Project[];
-  tasks: Task[];
-  sprints: Sprint[];
-  categories: TaskCategory[];
-  artifacts: Artifact[];
-  credentials: Credential[];
-  infrastructure: InfrastructureItem[];
-
-  // Loading
+  nodes: ProjectNode[];
   loading: boolean;
-  allDataLoaded: boolean;
 
   // Actions
   loadAllData: () => Promise<void>;
-  loadProjectContext: (id: string) => Promise<void>;
-
-  // Task actions
-  createTask: (data: Partial<Task> & { projectId: string }) => Promise<void>;
-  updateTask: (id: string, data: Partial<Task>) => Promise<void>;
-  deleteTask: (id: string) => Promise<void>;
 
   // Project actions
   createProject: (data: Partial<Project>) => Promise<void>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
 
-  // Category actions
-  createCategory: (data: Partial<TaskCategory> & { projectId: string }) => Promise<void>;
-  deleteCategory: (id: string) => Promise<void>;
-
-  // Sprint actions
-  createSprint: (data: { name: string; startDate?: string | null; endDate?: string | null; status?: string; projectId: string }) => Promise<void>;
-  updateSprint: (id: string, data: Partial<Sprint>) => Promise<void>;
-  deleteSprint: (id: string) => Promise<void>;
-
-  // Artifact actions
-  createArtifact: (data: Partial<Artifact> & { projectId: string }) => Promise<void>;
-  updateArtifact: (id: string, data: Partial<Artifact>) => Promise<void>;
-  deleteArtifact: (id: string) => Promise<void>;
-
-  // Credential actions
-  createCredential: (data: Partial<Credential> & { projectId: string }) => Promise<void>;
-  updateCredential: (id: string, data: Partial<Credential>) => Promise<void>;
-  deleteCredential: (id: string) => Promise<void>;
-
-  // Infrastructure actions
-  createInfrastructure: (data: Partial<InfrastructureItem> & { projectId: string }) => Promise<void>;
-  updateInfrastructure: (id: string, data: Partial<InfrastructureItem>) => Promise<void>;
-  deleteInfrastructure: (id: string) => Promise<void>;
+  // Node actions
+  createNode: (data: {
+    projectId: string;
+    parentId?: string | null;
+    name: string;
+    nodeType: 'branch' | 'item';
+    branchType?: string | null;
+    fields?: Record<string, unknown>;
+    order?: number;
+  }) => Promise<void>;
+  updateNode: (id: string, data: {
+    name?: string;
+    nodeType?: 'branch' | 'item';
+    branchType?: string | null;
+    fields?: Record<string, unknown>;
+    order?: number;
+    parentId?: string | null;
+  }) => Promise<void>;
+  deleteNode: (id: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Navigation
-  view: 'backlog',
   selectedProjectId: null,
-  selectProjectContext: async (id) => {
-    set({ selectedProjectId: id });
-    await get().loadProjectContext(id);
-  },
   expandedProjects: new Set<string>(),
+  selectProject: (id) => {
+    set((s) => {
+      const next = new Set(s.expandedProjects);
+      next.add(id);
+      return { selectedProjectId: id, expandedProjects: next };
+    });
+  },
   toggleProject: (id) => {
     set((s) => {
       const next = new Set(s.expandedProjects);
@@ -84,15 +67,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Data
   projects: [],
-  tasks: [],
-  sprints: [],
-  categories: [],
-  artifacts: [],
-  credentials: [],
-  infrastructure: [],
-
+  nodes: [],
   loading: false,
-  allDataLoaded: false,
 
   // Loaders
   loadAllData: async () => {
@@ -101,41 +77,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       const data = await api.getAllData();
       set({
         projects: data.projects,
-        tasks: data.tasks,
-        sprints: data.sprints,
-        categories: data.categories,
-        artifacts: data.artifacts,
-        credentials: data.credentials,
-        infrastructure: data.infrastructure,
+        nodes: data.nodes,
         loading: false,
-        allDataLoaded: true,
       });
     } catch (e) { set({ loading: false }); console.error(e); }
-  },
-
-  loadProjectContext: async (id: string) => {
-    try {
-      const [artifacts, credentials, infrastructure] = await Promise.all([
-        api.getArtifacts(id),
-        api.getCredentials(id),
-        api.getInfrastructure(id),
-      ]);
-      set({ artifacts, credentials, infrastructure, selectedProjectId: id });
-    } catch (e) { console.error(e); }
-  },
-
-  // Task CRUD
-  createTask: async (data) => {
-    await api.createTask(data);
-    await get().loadAllData();
-  },
-  updateTask: async (id, data) => {
-    await api.updateTask(id, data);
-    await get().loadAllData();
-  },
-  deleteTask: async (id) => {
-    await api.deleteTask(id);
-    await get().loadAllData();
   },
 
   // Project CRUD
@@ -153,78 +98,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().loadAllData();
   },
 
-  // Category CRUD
-  createCategory: async (data) => {
-    await api.createCategory(data);
+  // Node CRUD
+  createNode: async (data) => {
+    await api.createNode(data);
     await get().loadAllData();
   },
-  deleteCategory: async (id) => {
-    await api.deleteCategory(id);
+  updateNode: async (id, data) => {
+    await api.updateNode(id, data);
     await get().loadAllData();
   },
-
-  // Sprint CRUD
-  createSprint: async (data) => {
-    await api.createSprint(data);
+  deleteNode: async (id) => {
+    await api.deleteNode(id);
     await get().loadAllData();
-  },
-  updateSprint: async (id, data) => {
-    await api.updateSprint(id, data);
-    await get().loadAllData();
-  },
-  deleteSprint: async (id) => {
-    await api.deleteSprint(id);
-    await get().loadAllData();
-  },
-
-  // Artifact CRUD
-  createArtifact: async (data) => {
-    await api.createArtifact(data);
-    const pid = data.projectId || get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
-  },
-  updateArtifact: async (id, data) => {
-    await api.updateArtifact(id, data);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
-  },
-  deleteArtifact: async (id) => {
-    await api.deleteArtifact(id);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
-  },
-
-  // Credential CRUD
-  createCredential: async (data) => {
-    await api.createCredential(data);
-    const pid = data.projectId || get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
-  },
-  updateCredential: async (id, data) => {
-    await api.updateCredential(id, data);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
-  },
-  deleteCredential: async (id) => {
-    await api.deleteCredential(id);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
-  },
-
-  // Infrastructure CRUD
-  createInfrastructure: async (data) => {
-    await api.createInfrastructure(data);
-    const pid = data.projectId || get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
-  },
-  updateInfrastructure: async (id, data) => {
-    await api.updateInfrastructure(id, data);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
-  },
-  deleteInfrastructure: async (id) => {
-    await api.deleteInfrastructure(id);
-    const pid = get().selectedProjectId;
-    if (pid) await get().loadProjectContext(pid);
   },
 }));

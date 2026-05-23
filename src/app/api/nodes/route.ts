@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]/options';
+import { getCurrentUser } from '@/lib/session';
 import { db } from '@/lib/db';
 
 function parseNodeFields(node: any): any {
@@ -19,8 +18,8 @@ function parseNodeFields(node: any): any {
 
 // GET /api/nodes?projectId=xxx
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
   }
 
@@ -30,13 +29,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Check access
     const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) return NextResponse.json({ error: 'Проект не найден' }, { status: 404 });
 
-    const userId = (session.user as any).id;
-    const isAdmin = (session.user as any).role === 'admin';
-    if (!isAdmin && project.userId !== userId) {
+    if (user.role !== 'admin' && project.userId !== user.id) {
       return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 });
     }
 
@@ -70,8 +66,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/nodes
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
   }
 
@@ -83,13 +79,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'projectId and name are required' }, { status: 400 });
     }
 
-    // Check project access
     const project = await db.project.findUnique({ where: { id: projectId } });
     if (!project) return NextResponse.json({ error: 'Проект не найден' }, { status: 404 });
 
-    const userId = (session.user as any).id;
-    const isAdmin = (session.user as any).role === 'admin';
-    if (!isAdmin && project.userId !== userId) {
+    if (user.role !== 'admin' && project.userId !== user.id) {
       return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 });
     }
 

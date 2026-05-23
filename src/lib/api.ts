@@ -3,7 +3,11 @@ import type { Project, ProjectNode, AllDataResponse, FileAttachment } from '@/ty
 const BASE = '/api';
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...init });
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    ...init,
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `API error: ${res.status}`);
@@ -39,7 +43,7 @@ export const api = {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('nodeId', nodeId);
-    const res = await fetch(`${BASE}/upload`, { method: 'POST', body: formData });
+    const res = await fetch(`${BASE}/upload`, { method: 'POST', body: formData, credentials: 'include' });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error || `API error: ${res.status}`);

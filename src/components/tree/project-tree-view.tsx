@@ -149,8 +149,9 @@ export function ProjectTreeView() {
         setDetailOpen(false);
       }
       toast({ title: 'Узел удалён' });
-    } catch {
-      toast({ title: 'Ошибка удаления', description: 'Не удалось удалить узел', variant: 'destructive' });
+    } catch (err: any) {
+      console.error('handleConfirmDeleteNode error:', err);
+      toast({ title: 'Ошибка удаления', description: err?.message || 'Не удалось удалить узел', variant: 'destructive' });
     }
     setDeleteNodeId(null);
   };
@@ -186,8 +187,9 @@ export function ProjectTreeView() {
     try {
       await deleteProject(deleteProjectId);
       toast({ title: 'Проект удалён' });
-    } catch {
-      toast({ title: 'Ошибка удаления', description: 'Не удалось удалить проект', variant: 'destructive' });
+    } catch (err: any) {
+      console.error('handleConfirmDeleteProject error:', err);
+      toast({ title: 'Ошибка удаления', description: err?.message || 'Не удалось удалить проект', variant: 'destructive' });
     }
     setDeleteProjectId(null);
   };
@@ -207,8 +209,13 @@ export function ProjectTreeView() {
       setNewRootName('');
       setAddingToProject(null);
       toast({ title: addRootType === 'branch' ? 'Ветка создана' : 'Элемент создан' });
-    } catch {
-      toast({ title: 'Ошибка создания', variant: 'destructive' });
+    } catch (err: any) {
+      console.error('handleSubmitRootNode error:', err);
+      toast({
+        title: 'Ошибка создания',
+        description: err?.message || 'Не удалось создать узел',
+        variant: 'destructive',
+      });
     }
   };
 

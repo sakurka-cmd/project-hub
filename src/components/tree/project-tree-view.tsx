@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import type { ProjectNode } from '@/types';
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
@@ -9,6 +9,7 @@ import {
   PROJECT_STATUS_COLORS,
   PRESET_COLORS,
 } from '@/lib/constants';
+import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -79,6 +80,8 @@ export function ProjectTreeView() {
   const deleteProject = useAppStore((s) => s.deleteProject);
   const deleteNode = useAppStore((s) => s.deleteNode);
   const createNode = useAppStore((s) => s.createNode);
+  const updateNode = useAppStore((s) => s.updateNode);
+  const loadAllData = useAppStore((s) => s.loadAllData);
 
   // Expanded nodes within the tree
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -106,6 +109,13 @@ export function ProjectTreeView() {
   const [addingToProject, setAddingToProject] = useState<string | null>(null);
   const [addRootType, setAddRootType] = useState<'branch' | 'item'>('branch');
   const [newRootName, setNewRootName] = useState('');
+
+  // DnD sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
 
   const toggleNodeExpand = (id: string) => {
     setExpandedNodes((prev) => {
@@ -202,6 +212,52 @@ export function ProjectTreeView() {
     }
   };
 
+  // DnD: Drag end handler
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    // Prevent dropping a node onto itself or its children
+    // Check if overId is a branch (drop target)
+    const targetNode = nodes.find((n) => n.id === overId);
+    const draggedNode = nodes.find((n) => n.id === activeId);
+
+    if (!targetNode || !draggedNode) return;
+
+    // Only allow dropping onto branches
+    if (targetNode.nodeType !== 'branch') return;
+
+    // Prevent dropping a parent onto its own descendant
+    function isDescendant(parentId: string, checkId: string, allNodes: ProjectNode[]): boolean {
+      const children = allNodes.filter((n) => n.parentId === parentId);
+      for (const child of children) {
+        if (child.id === checkId) return true;
+        if (isDescendant(child.id, checkId, allNodes)) return true;
+      }
+      return false;
+    }
+
+    if (isDescendant(activeId, overId, nodes)) return;
+
+    // Don't move if already a child of the target
+    if (draggedNode.parentId === overId) return;
+
+    try {
+      await updateNode(activeId, { parentId: overId });
+      await loadAllData();
+      toast({ title: 'Узел перемещён' });
+    } catch {
+      toast({
+        title: 'Ошибка перемещения',
+        description: 'Не удалось переместить узел',
+        variant: 'destructive',
+      });
+    }
+  }, [nodes, updateNode, loadAllData, toast]);
+
   // Filter projects
   const filteredProjects = useMemo(() => {
     if (!searchQuery.trim()) return projects;
@@ -212,6 +268,11 @@ export function ProjectTreeView() {
         p.description?.toLowerCase().includes(q)
     );
   }, [projects, searchQuery]);
+
+  // Reload handler for child components
+  const handleReload = useCallback(async () => {
+    await loadAllData();
+  }, [loadAllData]);
 
   // Loading state
   if (loading && projects.length === 0) {
@@ -280,206 +341,208 @@ export function ProjectTreeView() {
         </div>
       )}
 
-      {/* Project list */}
-      <div className="flex flex-col gap-2">
-        {filteredProjects.map((project) => {
-          const isExpanded = expandedProjects.has(project.id);
-          const rootNodes = getRootNodes(nodes, project.id);
-          const nodeCount = countNodes(rootNodes);
+      {/* Project list with DnD */}
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <div className="flex flex-col gap-2">
+          {filteredProjects.map((project) => {
+            const isExpanded = expandedProjects.has(project.id);
+            const rootNodes = getRootNodes(nodes, project.id);
+            const nodeCount = countNodes(rootNodes);
 
-          return (
-            <div
-              key={project.id}
-              className="rounded-lg border bg-card"
-            >
-              {/* Project header row */}
+            return (
               <div
-                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-accent/30 transition-colors rounded-t-lg"
-                onClick={() => toggleProject(project.id)}
+                key={project.id}
+                className="rounded-lg border bg-card"
               >
-                {/* Chevron */}
-                <div className="shrink-0">
-                  {isExpanded ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </div>
-
-                {/* Color indicator */}
+                {/* Project header row */}
                 <div
-                  className="h-3 w-3 rounded-full shrink-0"
-                  style={{ backgroundColor: project.color }}
-                />
-
-                {/* Icon */}
-                {isExpanded ? (
-                  <FolderOpen className="h-5 w-5 text-muted-foreground shrink-0" />
-                ) : (
-                  <FolderKanban className="h-5 w-5 text-muted-foreground shrink-0" />
-                )}
-
-                {/* Name */}
-                <span className="font-semibold text-sm flex-1 min-w-0 truncate">
-                  {project.name}
-                </span>
-
-                {/* Status badge */}
-                <Badge
-                  variant="secondary"
-                  className={PROJECT_STATUS_COLORS[project.status]}
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-accent/30 transition-colors rounded-t-lg"
+                  onClick={() => toggleProject(project.id)}
                 >
-                  {PROJECT_STATUS_LABELS[project.status] || project.status}
-                </Badge>
+                  {/* Chevron */}
+                  <div className="shrink-0">
+                    {isExpanded ? (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </div>
 
-                {/* Node count */}
-                {nodeCount > 0 && (
-                  <Badge variant="outline" className="text-xs tabular-nums">
-                    {nodeCount}
+                  {/* Color indicator */}
+                  <div
+                    className="h-3 w-3 rounded-full shrink-0"
+                    style={{ backgroundColor: project.color }}
+                  />
+
+                  {/* Icon */}
+                  {isExpanded ? (
+                    <FolderOpen className="h-5 w-5 text-muted-foreground shrink-0" />
+                  ) : (
+                    <FolderKanban className="h-5 w-5 text-muted-foreground shrink-0" />
+                  )}
+
+                  {/* Name */}
+                  <span className="font-semibold text-sm flex-1 min-w-0 truncate">
+                    {project.name}
+                  </span>
+
+                  {/* Status badge */}
+                  <Badge
+                    variant="secondary"
+                    className={PROJECT_STATUS_COLORS[project.status]}
+                  >
+                    {PROJECT_STATUS_LABELS[project.status] || project.status}
                   </Badge>
-                )}
 
-                {/* Actions */}
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 hover:!opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAddChildToProject(project.id);
-                    }}
-                    title="Добавить узел"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteProjectId(project.id);
-                    }}
-                    title="Удалить проект"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Expanded: node tree */}
-              {isExpanded && (
-                <div className="border-t px-1 py-1">
-                  {rootNodes.length === 0 && addingToProject !== project.id ? (
-                    <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-                      <p className="flex-1">Нет узлов. Добавьте ветку или элемент.</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => handleStartAddRoot(project.id, 'branch')}
-                      >
-                        <FolderKanban className="h-3 w-3" />
-                        Ветка
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => handleStartAddRoot(project.id, 'item')}
-                      >
-                        <FileText className="h-3 w-3" />
-                        Элемент
-                      </Button>
-                    </div>
-                  ) : null}
-                  {/* Inline add root node */}
-                  {addingToProject === project.id && (
-                    <div className="flex items-center gap-1.5 px-2 py-1">
-                      {addRootType === 'branch' ? (
-                        <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      ) : (
-                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      )}
-                      <Input
-                        autoFocus
-                        value={newRootName}
-                        onChange={(e) => setNewRootName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSubmitRootNode(project.id);
-                          if (e.key === 'Escape') setAddingToProject(null);
-                        }}
-                        placeholder={addRootType === 'branch' ? 'Название ветки...' : 'Название элемента...'}
-                        className="h-7 text-sm"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        onClick={() => handleSubmitRootNode(project.id)}
-                        disabled={!newRootName.trim()}
-                      >
-                        <CirclePlus className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        onClick={() => setAddingToProject(null)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
+                  {/* Node count */}
+                  {nodeCount > 0 && (
+                    <Badge variant="outline" className="text-xs tabular-nums">
+                      {nodeCount}
+                    </Badge>
                   )}
-                  {rootNodes.length > 0 ? (
-                    <div className="flex flex-col gap-0.5">
-                      {rootNodes.map((rootNode) => (
-                        <NodeRow
-                          key={rootNode.id}
-                          node={rootNode}
-                          depth={0}
-                          projectId={project.id}
-                          expanded={expandedNodes}
-                          toggleExpand={toggleNodeExpand}
-                          selectedNodeId={selectedNode?.id ?? null}
-                          onSelectNode={handleSelectNode}
-                          onEditNode={handleEditNode}
-                          onDeleteNode={handleDeleteNode}
-                          onAddChild={handleAddChildToProject}
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 hover:!opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartAddRoot(project.id, 'branch');
+                      }}
+                      title="Добавить ветку"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteProjectId(project.id);
+                      }}
+                      title="Удалить проект"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Expanded: node tree */}
+                {isExpanded && (
+                  <div className="border-t px-1 py-1">
+                    {rootNodes.length === 0 && addingToProject !== project.id ? (
+                      <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                        <p className="flex-1">Нет узлов. Добавьте ветку или элемент.</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => handleStartAddRoot(project.id, 'branch')}
+                        >
+                          <FolderKanban className="h-3 w-3" />
+                          Ветка
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => handleStartAddRoot(project.id, 'item')}
+                        >
+                          <FileText className="h-3 w-3" />
+                          Элемент
+                        </Button>
+                      </div>
+                    ) : null}
+                    {/* Inline add root node */}
+                    {addingToProject === project.id && (
+                      <div className="flex items-center gap-1.5 px-2 py-1">
+                        {addRootType === 'branch' ? (
+                          <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
+                        <Input
+                          autoFocus
+                          value={newRootName}
+                          onChange={(e) => setNewRootName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSubmitRootNode(project.id);
+                            if (e.key === 'Escape') setAddingToProject(null);
+                          }}
+                          placeholder={addRootType === 'branch' ? 'Название ветки...' : 'Название элемента...'}
+                          className="h-7 text-sm"
                         />
-                      ))}
-                    </div>
-                  ) : null}
-                  {/* Add root buttons at the bottom of node list */}
-                  {rootNodes.length > 0 && addingToProject !== project.id && (
-                    <div className="flex items-center gap-1 px-2 py-0.5">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => handleStartAddRoot(project.id, 'branch')}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Добавить ветку
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => handleStartAddRoot(project.id, 'item')}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Добавить элемент
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => handleSubmitRootNode(project.id)}
+                          disabled={!newRootName.trim()}
+                        >
+                          <CirclePlus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => setAddingToProject(null)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                    {rootNodes.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {rootNodes.map((rootNode) => (
+                          <NodeRow
+                            key={rootNode.id}
+                            node={rootNode}
+                            depth={0}
+                            projectId={project.id}
+                            expanded={expandedNodes}
+                            toggleExpand={toggleNodeExpand}
+                            selectedNodeId={selectedNode?.id ?? null}
+                            onSelectNode={handleSelectNode}
+                            onEditNode={handleEditNode}
+                            onDeleteNode={handleDeleteNode}
+                            onReload={handleReload}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                    {/* Add root buttons at the bottom of node list */}
+                    {rootNodes.length > 0 && addingToProject !== project.id && (
+                      <div className="flex items-center gap-1 px-2 py-0.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => handleStartAddRoot(project.id, 'branch')}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Добавить ветку
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => handleStartAddRoot(project.id, 'item')}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Добавить элемент
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </DndContext>
 
       {/* Create project dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

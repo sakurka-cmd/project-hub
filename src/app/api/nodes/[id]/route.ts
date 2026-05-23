@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '../../auth/[...nextauth]/options';
 import { db } from '@/lib/db';
 
 function parseNodeFields(node: any): any {
@@ -15,11 +17,16 @@ function parseNodeFields(node: any): any {
   return result;
 }
 
-// GET /api/nodes/[id] — get single node with tree
+// GET
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+  }
+
   const { id } = await params;
 
   try {
@@ -34,16 +41,13 @@ export async function GET(
               include: {
                 children: {
                   orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-                  include: {
-                    children: {
-                      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-                    },
-                  },
+                  include: { children: true },
                 },
               },
             },
           },
         },
+        attachments: { orderBy: { createdAt: 'desc' } },
       },
     });
 
@@ -58,11 +62,16 @@ export async function GET(
   }
 }
 
-// PUT /api/nodes/[id] — update node
+// PUT
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+  }
+
   const { id } = await params;
 
   try {
@@ -79,11 +88,6 @@ export async function PUT(
     const node = await db.node.update({
       where: { id },
       data: updateData,
-      include: {
-        children: {
-          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-        },
-      },
     });
 
     return NextResponse.json(parseNodeFields(node));
@@ -93,14 +97,31 @@ export async function PUT(
   }
 }
 
-// DELETE /api/nodes/[id] — delete node (cascade deletes children)
+// DELETE
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
+  }
+
   const { id } = await params;
 
   try {
+    // Delete file attachments from disk
+    const attachments = await db.fileAttachment.findMany({ where: { nodeId: id } });
+    const { readdir, rm } = await import('fs/promises');
+    const path = await import('path');
+
+    for (const att of attachments) {
+      try {
+        const dir = process.env.UPLOAD_DIR || path.join(process.cwd(), 'data', 'uploads');
+        await rm(path.join(dir, att.nodeId, att.fileName), { force: true });
+      } catch {}
+    }
+
     await db.node.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

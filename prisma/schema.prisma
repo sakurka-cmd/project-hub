@@ -8,18 +8,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==================== ПОЛЬЗОВАТЕЛИ ====================
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  role      String   @default("user") // admin, user
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+}
+
+// ==================== СИСТЕМНЫЕ НАСТРОЙКИ ====================
+
+model SystemSetting {
+  key   String @id
+  value String
+}
+
 // ==================== ПРОЕКТЫ ====================
 
 model Project {
   id          String   @id @default(cuid())
   name        String
   description String?
-  status      String   @default("active") // active, paused, completed, archived
+  status      String   @default("active")
   color       String   @default("#6366f1")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  nodes Node[]
+  userId String?
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodes  Node[]
 }
 
 // ==================== УЗЛЫ ДЕРЕВА ====================
@@ -29,17 +51,31 @@ model Node {
   projectId  String
   parentId   String?
   name       String
-  nodeType   String   @default("item")  // branch, item
-  branchType String?                    // Для будущей типизации: tasks, infrastructure, credentials, artifacts и т.д.
-  fields     String   @default("{}")    // JSON: произвольные поля элемента
+  nodeType   String   @default("item")
+  branchType String?
+  fields     String   @default("{}")
   order      Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent   Node?   @relation("NodeTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children Node[]  @relation("NodeTree")
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent     Node?            @relation("NodeTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Node[]           @relation("NodeTree")
+  attachments FileAttachment[]
+}
 
-  @@index([projectId])
-  @@index([parentId])
+// ==================== ПРИКРЕПЛЁННЫЕ ФАЙЛЫ ====================
+
+model FileAttachment {
+  id           String   @id @default(cuid())
+  nodeId       String
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+
+  node Node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
 }

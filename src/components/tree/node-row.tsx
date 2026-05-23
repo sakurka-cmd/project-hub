@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { ProjectNode } from '@/types';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -11,6 +11,7 @@ import {
 } from '@/lib/constants';
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,8 @@ import {
   KeyRound,
   Server,
   X,
+  GripVertical,
+  Copy,
 } from 'lucide-react';
 
 const BRANCH_BORDER_COLORS: Record<string, string> = {
@@ -63,7 +66,7 @@ interface NodeRowProps {
   onSelectNode: (node: ProjectNode) => void;
   onEditNode: (node: ProjectNode) => void;
   onDeleteNode: (node: ProjectNode) => void;
-  onAddChild: (parentId: string) => void;
+  onReload: () => Promise<void>;
 }
 
 export function NodeRow({
@@ -76,7 +79,7 @@ export function NodeRow({
   onSelectNode,
   onEditNode,
   onDeleteNode,
-  onAddChild,
+  onReload,
 }: NodeRowProps) {
   const { toast } = useToast();
   const createNode = useAppStore((s) => s.createNode);
@@ -90,10 +93,50 @@ export function NodeRow({
   const [isAddingChild, setIsAddingChild] = useState(false);
   const [addChildType, setAddChildType] = useState<'branch' | 'item'>('item');
   const [newChildName, setNewChildName] = useState('');
+  const [duplicating, setDuplicating] = useState(false);
 
   const borderColor = isBranch && node.branchType
     ? BRANCH_BORDER_COLORS[node.branchType]
     : undefined;
+
+  // DnD: Draggable
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDraggableRef,
+    transform,
+    isDragging,
+  } = useDraggable({
+    id: node.id,
+    data: { type: 'node', nodeType: node.nodeType, id: node.id },
+  });
+
+  // DnD: Droppable (for branches only)
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: node.id,
+    data: { type: 'branch', id: node.id },
+    disabled: !isBranch,
+  });
+
+  // Merge refs for draggable + droppable
+  const mergedRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      setDraggableRef(el);
+      if (isBranch) setDroppableRef(el);
+    },
+    [setDraggableRef, setDroppableRef, isBranch],
+  );
+
+  const rowStyle: React.CSSProperties = {
+    paddingLeft: `${depth * 28 + 8}px`,
+    ...(transform
+      ? {
+          transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+          opacity: isDragging ? 0.5 : 1,
+          zIndex: isDragging ? 1000 : undefined,
+        }
+      : {}),
+  };
 
   const handleExport = async () => {
     try {
@@ -105,6 +148,23 @@ export function NodeRow({
         description: 'Не удалось экспортировать ветку',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleDuplicate = async () => {
+    setDuplicating(true);
+    try {
+      await api.duplicateNode(node.id);
+      await onReload();
+      toast({ title: 'Узел дублирован' });
+    } catch {
+      toast({
+        title: 'Ошибка дублирования',
+        description: 'Не удалось создать копию узла',
+        variant: 'destructive',
+      });
+    } finally {
+      setDuplicating(false);
     }
   };
 
@@ -146,15 +206,28 @@ export function NodeRow({
   return (
     <>
       <div
+        ref={mergedRef}
+        style={rowStyle}
         className={cn(
           'group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm transition-colors cursor-pointer',
           'hover:bg-accent/50',
           isSelected && 'bg-accent',
-          borderColor && `border-l-2 ${borderColor}`
+          borderColor && `border-l-2 ${borderColor}`,
+          isOver && isBranch && 'ring-2 ring-primary/50 ring-offset-1',
+          isDragging && 'shadow-lg',
         )}
-        style={{ paddingLeft: `${depth * 28 + 8}px` }}
         onClick={() => onSelectNode(node)}
       >
+        {/* Drag handle */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
+
         {/* Expand/collapse chevron */}
         {isBranch ? (
           <button
@@ -286,6 +359,16 @@ export function NodeRow({
                 <Pencil className="h-4 w-4" />
                 Редактировать
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDuplicate();
+                }}
+                disabled={duplicating}
+              >
+                <Copy className="h-4 w-4" />
+                {duplicating ? 'Дублирование...' : 'Дублировать'}
+              </DropdownMenuItem>
               {isBranch && (
                 <>
                   <DropdownMenuSeparator />
@@ -356,7 +439,7 @@ export function NodeRow({
                 onSelectNode={onSelectNode}
                 onEditNode={onEditNode}
                 onDeleteNode={onDeleteNode}
-                onAddChild={onAddChild}
+                onReload={onReload}
               />
             ))}
 

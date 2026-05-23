@@ -1,3 +1,12 @@
+// ==================== ПОЛЬЗОВАТЕЛИ ====================
+export interface User {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ==================== ПРОЕКТЫ ====================
 export interface Project {
   id: string;
@@ -5,6 +14,7 @@ export interface Project {
   description: string | null;
   status: 'active' | 'paused' | 'completed' | 'archived';
   color: string;
+  userId: string | null;
   createdAt: string;
   updatedAt: string;
   _count?: { nodes: number };
@@ -26,11 +36,32 @@ export interface ProjectNode {
   children?: ProjectNode[];
 }
 
-// ==================== APP STATE ====================
-export type AppView = 'projects';
+// ==================== ФАЙЛЫ ====================
+export interface FileAttachment {
+  id: string;
+  nodeId: string;
+  fileName: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
+// ==================== СИСТЕМНЫЕ НАСТРОЙКИ ====================
+export interface SystemSetting {
+  key: string;
+  value: string;
+}
 
 // ==================== UNIFIED DATA RESPONSE ====================
 export interface AllDataResponse {
   projects: Project[];
   nodes: ProjectNode[];
+}
+
+// ==================== SESSION EXTENSIONS ====================
+export interface SessionUser {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
 }

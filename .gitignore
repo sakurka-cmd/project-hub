@@ -61,3 +61,4 @@ db/*.db
 download/
 examples/
 telegram-bot.ts
+data/uploads/

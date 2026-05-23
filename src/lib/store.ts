@@ -3,6 +3,13 @@
 import { create } from 'zustand';
 import type { Project, ProjectNode } from '@/types';
 import { api } from '@/lib/api';
+import { signOut } from 'next-auth/react';
+
+interface CurrentUser {
+  id: string;
+  username: string;
+  role: string;
+}
 
 interface AppState {
   // Navigation
@@ -15,6 +22,11 @@ interface AppState {
   projects: Project[];
   nodes: ProjectNode[];
   loading: boolean;
+
+  // Current user
+  currentUser: CurrentUser | null;
+  setCurrentUser: (user: CurrentUser | null) => void;
+  logout: () => Promise<void>;
 
   // Actions
   loadAllData: () => Promise<void>;
@@ -69,6 +81,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   nodes: [],
   loading: false,
+
+  // Current user
+  currentUser: null,
+  setCurrentUser: (user) => set({ currentUser: user }),
+  logout: async () => {
+    set({ currentUser: null });
+    await signOut({ callbackUrl: '/login' });
+  },
 
   // Loaders
   loadAllData: async () => {

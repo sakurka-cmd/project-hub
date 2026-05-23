@@ -1,63 +1,29 @@
-import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
 
 export async function GET() {
   try {
-    // 1. All projects with task counts
     const projects = await db.project.findMany({
-      include: {
-        _count: {
-          select: { tasks: true },
-        },
-      },
+      include: { _count: { select: { nodes: true } } },
       orderBy: { updatedAt: 'desc' },
-    })
+    });
 
-    const projectIds = projects.map((p) => p.id)
-
-    // 2. All tasks — root tasks with 3 levels of children
-    const tasks = await db.task.findMany({
+    // Get all root nodes with up to 5 levels of nesting
+    const rootNodes = await db.node.findMany({
       where: { parentId: null },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
       include: {
-        category: true,
-        project: {
-          select: { id: true, name: true, color: true },
-        },
-        parent: {
-          select: { id: true, title: true, workItemType: true },
-        },
         children: {
-          orderBy: { order: 'asc' },
+          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
           include: {
-            category: true,
-            project: {
-              select: { id: true, name: true, color: true },
-            },
-            parent: {
-              select: { id: true, title: true, workItemType: true },
-            },
             children: {
-              orderBy: { order: 'asc' },
+              orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
               include: {
-                category: true,
-                project: {
-                  select: { id: true, name: true, color: true },
-                },
-                parent: {
-                  select: { id: true, title: true, workItemType: true },
-                },
                 children: {
-                  orderBy: { order: 'asc' },
+                  orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
                   include: {
-                    category: true,
-                    project: {
-                      select: { id: true, name: true, color: true },
-                    },
-                    parent: {
-                      select: { id: true, title: true, workItemType: true },
-                    },
-                    sprint: {
-                      select: { id: true, name: true, status: true },
+                    children: {
+                      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
                     },
                   },
                 },
@@ -65,62 +31,38 @@ export async function GET() {
             },
           },
         },
-        sprint: {
-          select: { id: true, name: true, status: true },
-        },
       },
-      orderBy: [{ order: 'asc' }, { updatedAt: 'desc' }],
-    })
+    });
 
-    // 3. All sprints
-    const sprints = await db.sprint.findMany({
-      include: {
-        _count: { select: { tasks: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+    // Parse JSON fields
+    function parseFields(node: any): any {
+      let fields = {};
+      try {
+        fields = typeof node.fields === 'string' ? JSON.parse(node.fields) : (node.fields || {});
+      } catch {
+        fields = {};
+      }
+      const result = {
+        ...node,
+        fields,
+        children: node.children ? node.children.map(parseFields) : undefined,
+      };
+      delete result._count;
+      return result;
+    }
 
-    // 4. All categories
-    const categories = await db.taskCategory.findMany({
-      include: {
-        _count: { select: { tasks: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    })
-
-    // 5. All artifacts, credentials, infrastructure
-    const artifacts = await db.artifact.findMany({
-      orderBy: { updatedAt: 'desc' },
-    })
-
-    const credentials = await db.credential.findMany({
-      orderBy: { updatedAt: 'desc' },
-    })
-
-    const infrastructure = await db.infrastructureItem.findMany({
-      orderBy: { updatedAt: 'desc' },
-    })
-
-    const projectsWithCount = projects.map((project) => ({
-      ...project,
-      taskCount: project._count.tasks,
+    const projectsWithCount = projects.map((p) => ({
+      ...p,
+      nodeCount: p._count.nodes,
       _count: undefined,
-    }))
+    }));
 
     return NextResponse.json({
       projects: projectsWithCount,
-      tasks,
-      sprints,
-      categories,
-      artifacts,
-      credentials,
-      infrastructure,
-    })
+      nodes: rootNodes.map(parseFields),
+    });
   } catch (error) {
-    console.error('Error fetching all data:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch data' },
-      { status: 500 }
-    )
+    console.error('Error fetching all data:', error);
+    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
   }
 }

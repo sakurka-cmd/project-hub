@@ -11,7 +11,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
-import { UnifiedBacklog } from '@/components/backlog/unified-backlog';
+import { ProjectTreeView } from '@/components/tree/project-tree-view';
 
 function SidebarContent() {
   return (
@@ -81,7 +81,7 @@ export function AppShell() {
 
         {/* View content */}
         <div className="p-4 md:p-6 lg:p-8">
-          <UnifiedBacklog />
+          <ProjectTreeView />
         </div>
       </main>
     </div>

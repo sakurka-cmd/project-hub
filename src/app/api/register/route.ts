@@ -26,6 +26,14 @@ export async function POST(req: NextRequest) {
 
     const userCount = await db.user.count();
 
+    // Check if registration is allowed (unless it's the first user / admin)
+    if (userCount > 0) {
+      const regSetting = await db.systemSetting.findUnique({ where: { key: 'allow_registration' } });
+      if (regSetting && regSetting.value === 'false') {
+        return NextResponse.json({ error: 'Регистрация закрыта администратором' }, { status: 403 });
+      }
+    }
+
     const user = await db.user.create({
       data: {
         username: username.trim(),

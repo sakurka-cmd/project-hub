@@ -212,6 +212,29 @@ export function ProjectTreeView() {
     }
   };
 
+  // Helper: find a node by ID in a tree structure
+  const findNodeInTree = useCallback((id: string, treeNodes: ProjectNode[]): ProjectNode | null => {
+    for (const n of treeNodes) {
+      if (n.id === id) return n;
+      if (n.children?.length) {
+        const found = findNodeInTree(id, n.children);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, []);
+
+  // Helper: check if checkId is a descendant of parentId in a tree
+  const isDescendantInTree = useCallback((parentId: string, checkId: string, treeNodes: ProjectNode[]): boolean => {
+    const parent = findNodeInTree(parentId, treeNodes);
+    if (!parent || !parent.children?.length) return false;
+    for (const child of parent.children) {
+      if (child.id === checkId) return true;
+      if (isDescendantInTree(child.id, checkId, treeNodes)) return true;
+    }
+    return false;
+  }, [findNodeInTree]);
+
   // DnD: Drag end handler
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -220,10 +243,8 @@ export function ProjectTreeView() {
     const activeId = String(active.id);
     const overId = String(over.id);
 
-    // Prevent dropping a node onto itself or its children
-    // Check if overId is a branch (drop target)
-    const targetNode = nodes.find((n) => n.id === overId);
-    const draggedNode = nodes.find((n) => n.id === activeId);
+    const targetNode = findNodeInTree(overId, nodes);
+    const draggedNode = findNodeInTree(activeId, nodes);
 
     if (!targetNode || !draggedNode) return;
 
@@ -231,16 +252,7 @@ export function ProjectTreeView() {
     if (targetNode.nodeType !== 'branch') return;
 
     // Prevent dropping a parent onto its own descendant
-    function isDescendant(parentId: string, checkId: string, allNodes: ProjectNode[]): boolean {
-      const children = allNodes.filter((n) => n.parentId === parentId);
-      for (const child of children) {
-        if (child.id === checkId) return true;
-        if (isDescendant(child.id, checkId, allNodes)) return true;
-      }
-      return false;
-    }
-
-    if (isDescendant(activeId, overId, nodes)) return;
+    if (isDescendantInTree(activeId, overId, nodes)) return;
 
     // Don't move if already a child of the target
     if (draggedNode.parentId === overId) return;
@@ -256,7 +268,7 @@ export function ProjectTreeView() {
         variant: 'destructive',
       });
     }
-  }, [nodes, updateNode, loadAllData, toast]);
+  }, [nodes, updateNode, loadAllData, toast, findNodeInTree, isDescendantInTree]);
 
   // Filter projects
   const filteredProjects = useMemo(() => {
@@ -640,7 +652,7 @@ export function ProjectTreeView() {
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить узел?</AlertDialogTitle>
             <AlertDialogDescription>
-              {nodes.find((n) => n.id === deleteNodeId)?.nodeType === 'branch'
+              {findNodeInTree(deleteNodeId ?? '', nodes)?.nodeType === 'branch'
                 ? 'Ветка и все её дочерние элементы будут удалены безвозвратно.'
                 : 'Элемент будет удалён безвозвратно.'}
             </AlertDialogDescription>

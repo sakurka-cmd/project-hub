@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]/options';
+import { getCurrentUser } from '@/lib/session';
 import { db } from '@/lib/db';
 
 // GET — settings (admin sees all, users see public_* only)
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
   }
 
   try {
-    const isAdmin = (session.user as any).role === 'admin';
+    const isAdmin = user.role === 'admin';
     const settings = isAdmin
       ? await db.systemSetting.findMany()
       : await db.systemSetting.findMany({ where: { key: { startsWith: 'public_' } } });
@@ -27,8 +26,8 @@ export async function GET() {
 
 // PUT — update settings (admin only)
 export async function PUT(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user as any).role !== 'admin') {
+  const user = await getCurrentUser();
+  if (!user || user.role !== 'admin') {
     return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 });
   }
 

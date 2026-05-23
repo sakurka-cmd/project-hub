@@ -1,20 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]/options';
+import { getCurrentUser } from '@/lib/session';
 import { db } from '@/lib/db';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
   }
 
-  const userId = (session.user as any).id;
-  const isAdmin = (session.user as any).role === 'admin';
-
   try {
     const projects = await db.project.findMany({
-      where: isAdmin ? {} : { userId },
+      where: user.role === 'admin' ? {} : { userId: user.id },
       include: { _count: { select: { nodes: true } } },
       orderBy: { updatedAt: 'desc' },
     });
@@ -33,8 +29,8 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
   }
 
@@ -51,7 +47,7 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         description: description?.trim() || null,
         color: color || '#6366f1',
-        userId: (session.user as any).id,
+        userId: user.id,
       },
     });
 

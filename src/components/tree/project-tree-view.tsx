@@ -7,9 +7,11 @@ import { useToast } from '@/hooks/use-toast';
 import {
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_COLORS,
+  PROJECT_STATUSES,
   PRESET_COLORS,
 } from '@/lib/constants';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -104,6 +106,9 @@ export function ProjectTreeView() {
 
   // Color picker state
   const [colorPickerProjectId, setColorPickerProjectId] = useState<string | null>(null);
+
+  // Status picker state
+  const [statusPickerProjectId, setStatusPickerProjectId] = useState<string | null>(null);
 
   // Delete project confirmation
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
@@ -454,13 +459,59 @@ export function ProjectTreeView() {
                     {project.name}
                   </span>
 
-                  {/* Status badge */}
-                  <Badge
-                    variant="secondary"
-                    className={PROJECT_STATUS_COLORS[project.status]}
+                  {/* Status badge — clickable to change */}
+                  <Popover
+                    open={statusPickerProjectId === project.id}
+                    onOpenChange={(open) => {
+                      if (!open) setStatusPickerProjectId(null);
+                    }}
                   >
-                    {PROJECT_STATUS_LABELS[project.status] || project.status}
-                  </Badge>
+                    <PopoverTrigger asChild>
+                      <button
+                        className={cn(
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-all hover:ring-2 hover:ring-foreground/20 cursor-pointer shrink-0',
+                          PROJECT_STATUS_COLORS[project.status]
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStatusPickerProjectId(project.id);
+                        }}
+                      >
+                        {PROJECT_STATUS_LABELS[project.status] || project.status}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-2" align="end" side="bottom">
+                      <div className="flex flex-col gap-0.5">
+                        {PROJECT_STATUSES.map((status) => (
+                          <button
+                            key={status}
+                            className={cn(
+                              'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors text-left',
+                              project.status === status
+                                ? 'bg-accent font-medium'
+                                : 'hover:bg-accent/50'
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateProject(project.id, { status });
+                              setStatusPickerProjectId(null);
+                            }}
+                          >
+                            <span
+                              className="h-2 w-2 rounded-full shrink-0"
+                              style={{
+                                backgroundColor: status === 'active' ? '#10b981'
+                                  : status === 'paused' ? '#f59e0b'
+                                  : status === 'completed' ? '#0ea5e9'
+                                  : '#6b7280'
+                              }}
+                            />
+                            {PROJECT_STATUS_LABELS[status]}
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
 
                   {/* Node count */}
                   {nodeCount > 0 && (

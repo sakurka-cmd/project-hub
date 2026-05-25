@@ -1,10 +1,11 @@
 'use client';
 
-import { useSession, signOut } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { Settings, LogOut, Shield, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useAppStore } from '@/lib/store';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,11 +16,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export function UserMenu() {
-  const { data: session } = useSession();
+  const currentUser = useAppStore((s) => s.currentUser);
 
-  const username = (session?.user as any)?.username || session?.user?.name || 'Пользователь';
-  const role = (session?.user as any)?.role || 'user';
-  const isAdmin = role === 'admin';
+  const username = currentUser?.username || 'Пользователь';
+  const isAdmin = currentUser?.role === 'admin';
 
   return (
     <DropdownMenu>

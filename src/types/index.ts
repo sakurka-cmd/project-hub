@@ -27,9 +27,11 @@ export interface ProjectNode {
   projectId: string;
   parentId: string | null;
   name: string;
-  nodeType: 'branch' | 'item';
+  nodeType: 'branch' | 'item' | 'task' | 'protocol';
   branchType: string | null;
   elementTypeId: string | null;
+  taskTypeId: string | null;
+  completed: boolean;
   fields: Record<string, unknown>;
   order: number;
   createdAt: string;
@@ -70,11 +72,22 @@ export interface ElementType {
   updatedAt: string;
 }
 
+// ==================== ТИПЫ ЗАДАЧ ====================
+export interface TaskType {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ==================== UNIFIED DATA RESPONSE ====================
 export interface AllDataResponse {
   projects: Project[];
   nodes: ProjectNode[];
   elementTypes: ElementType[];
+  taskTypes: TaskType[];
 }
 
 // ==================== SESSION EXTENSIONS ====================

@@ -47,13 +47,15 @@ model Project {
 // ==================== УЗЛЫ ДЕРЕВА ====================
 
 model Node {
-  id         String   @id @default(cuid())
+  id             String   @id @default(cuid())
   projectId      String
   parentId       String?
   name           String
-  nodeType       String   @default("item")
+  nodeType       String   @default("item") // branch, item, task
   branchType     String?
   elementTypeId  String?
+  taskTypeId     String?
+  completed      Boolean  @default(false)
   fields         String   @default("{}")
   order          Int      @default(0)
   createdAt      DateTime @default(now())
@@ -64,6 +66,7 @@ model Node {
   children     Node[]       @relation("NodeTree")
   attachments  FileAttachment[]
   elementType  ElementType? @relation(fields: [elementTypeId], references: [id], onDelete: SetNull)
+  taskType     TaskType?    @relation(fields: [taskTypeId], references: [id], onDelete: SetNull)
 }
 
 // ==================== ПРИКРЕПЛЁННЫЕ ФАЙЛЫ ====================
@@ -90,6 +93,19 @@ model ElementType {
   description String?
   color       String   @default("#6366f1")
   fields      String   @default("[]") // JSON: [{key, defaultValue}]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  nodes Node[]
+}
+
+// ==================== ТИПЫ ЗАДАЧ ====================
+
+model TaskType {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String   @default("#6366f1")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

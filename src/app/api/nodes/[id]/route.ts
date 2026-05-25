@@ -84,6 +84,8 @@ export async function PUT(
     if (body.order !== undefined) updateData.order = body.order;
     if (body.parentId !== undefined) updateData.parentId = body.parentId;
     if (body.fields !== undefined) updateData.fields = JSON.stringify(body.fields);
+    if (body.completed !== undefined) updateData.completed = body.completed;
+    if (body.taskTypeId !== undefined) updateData.taskTypeId = body.taskTypeId || null;
 
     const node = await db.node.update({
       where: { id },

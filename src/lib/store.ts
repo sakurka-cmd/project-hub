@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Project, ProjectNode, ElementType } from '@/types';
+import type { Project, ProjectNode, ElementType, TaskType } from '@/types';
 import { api } from '@/lib/api';
 import { signOut } from 'next-auth/react';
 
@@ -22,6 +22,7 @@ interface AppState {
   projects: Project[];
   nodes: ProjectNode[];
   elementTypes: ElementType[];
+  taskTypes: TaskType[];
   loading: boolean;
 
   // Current user
@@ -42,19 +43,22 @@ interface AppState {
     projectId: string;
     parentId?: string | null;
     name: string;
-    nodeType: 'branch' | 'item';
+    nodeType: 'branch' | 'item' | 'task' | 'protocol';
     branchType?: string | null;
     elementTypeId?: string | null;
+    taskTypeId?: string | null;
     fields?: Record<string, unknown>;
     order?: number;
   }) => Promise<void>;
   updateNode: (id: string, data: {
     name?: string;
-    nodeType?: 'branch' | 'item';
+    nodeType?: 'branch' | 'item' | 'task' | 'protocol';
     branchType?: string | null;
     fields?: Record<string, unknown>;
     order?: number;
     parentId?: string | null;
+    completed?: boolean;
+    taskTypeId?: string | null;
   }) => Promise<void>;
   deleteNode: (id: string) => Promise<void>;
 }
@@ -71,7 +75,6 @@ async function withAuthCheck<T>(fn: () => Promise<T>): Promise<T> {
     return await fn();
   } catch (err) {
     if (isAuthError(err)) {
-      // Session expired or invalid — redirect to login
       await signOut({ callbackUrl: '/login' });
       throw new Error('Сессия истекла. Войдите заново.');
     }
@@ -103,6 +106,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   nodes: [],
   elementTypes: [],
+  taskTypes: [],
   loading: false,
 
   // Current user
@@ -122,6 +126,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         projects: data.projects,
         nodes: data.nodes,
         elementTypes: data.elementTypes || [],
+        taskTypes: data.taskTypes || [],
         loading: false,
       });
     } catch (e) {

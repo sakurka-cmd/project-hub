@@ -25,6 +25,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -47,6 +52,7 @@ import {
   Search,
   FileText,
   X,
+  Palette,
 } from 'lucide-react';
 
 // Count all nodes recursively
@@ -77,6 +83,7 @@ export function ProjectTreeView() {
   const loading = useAppStore((s) => s.loading);
   const toggleProject = useAppStore((s) => s.toggleProject);
   const createProject = useAppStore((s) => s.createProject);
+  const updateProject = useAppStore((s) => s.updateProject);
   const deleteProject = useAppStore((s) => s.deleteProject);
   const deleteNode = useAppStore((s) => s.deleteNode);
   const createNode = useAppStore((s) => s.createNode);
@@ -94,6 +101,9 @@ export function ProjectTreeView() {
   const [newDescription, setNewDescription] = useState('');
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
   const [creating, setCreating] = useState(false);
+
+  // Color picker state
+  const [colorPickerProjectId, setColorPickerProjectId] = useState<string | null>(null);
 
   // Delete project confirmation
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
@@ -387,11 +397,50 @@ export function ProjectTreeView() {
                     )}
                   </div>
 
-                  {/* Color indicator */}
-                  <div
-                    className="h-3 w-3 rounded-full shrink-0"
-                    style={{ backgroundColor: project.color }}
-                  />
+                  {/* Color indicator — clickable to change */}
+                  <Popover
+                    open={colorPickerProjectId === project.id}
+                    onOpenChange={(open) => {
+                      if (!open) setColorPickerProjectId(null);
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <button
+                        className="h-3 w-3 rounded-full shrink-0 hover:ring-2 hover:ring-foreground/30 transition-all cursor-pointer"
+                        style={{ backgroundColor: project.color }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setColorPickerProjectId(project.id);
+                        }}
+                        title="Изменить цвет"
+                      />
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-3" align="start" side="bottom">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Palette className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="text-xs font-medium text-muted-foreground">Цвет проекта</span>
+                      </div>
+                      <div className="grid grid-cols-6 gap-1.5">
+                        {PRESET_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            className={`h-6 w-6 rounded-full border-2 transition-all ${
+                              project.color === color
+                                ? 'border-foreground scale-110'
+                                : 'border-transparent hover:border-muted-foreground/50'
+                            }`}
+                            style={{ backgroundColor: color }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateProject(project.id, { color });
+                              setColorPickerProjectId(null);
+                            }}
+                            aria-label={`Цвет ${color}`}
+                          />
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
 
                   {/* Icon */}
                   {isExpanded ? (

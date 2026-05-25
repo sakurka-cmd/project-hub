@@ -253,7 +253,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     } finally {
       setSaving(false);
     }
-  }, [node, name, branchType, fields, isBranch, isProtocol, isTask, protocolText, decisions, updateNode, toast]);
+  }, [node, name, branchType, fields, isBranch, isProtocol, isTask, protocolText, decisions, screenshots, updateNode, toast]);
 
   const handleAddField = () => {
     setFields((prev) => [...prev, { key: '', value: '', isNew: true }]);
@@ -321,17 +321,59 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     setPastingScreenshot(true);
     try {
       const att = await api.uploadFile(node.id, namedFile);
-      setScreenshots(prev => [...prev, att.id]);
+      const newScreenshots = [...screenshots, att.id];
+      setScreenshots(newScreenshots);
+
+      // Auto-save screenshot reference to node fields immediately
+      const currentFields = node.fields || {};
+      await updateNode(node.id, {
+        fields: {
+          ...currentFields,
+          protocolText: typeof currentFields.protocolText === 'string' ? currentFields.protocolText : protocolText,
+          decisions: Array.isArray(currentFields.decisions) ? currentFields.decisions : decisions,
+          screenshots: newScreenshots,
+        },
+      });
+      // Update snapshot so hasChanges stays clean
+      initialSnapshot.current = JSON.stringify({
+        name: node.name,
+        branchType: node.branchType || '__none__',
+        fields: {
+          ...currentFields,
+          screenshots: newScreenshots,
+        },
+      });
+
       toast({ title: 'Скриншот добавлен' });
     } catch (err: any) {
       toast({ title: 'Ошибка вставки', description: err?.message || 'Не удалось загрузить скриншот', variant: 'destructive' });
     } finally {
       setPastingScreenshot(false);
     }
-  }, [node, isProtocol, toast]);
+  }, [node, isProtocol, screenshots, protocolText, decisions, updateNode, toast]);
 
   const handleRemoveScreenshot = async (attId: string) => {
-    setScreenshots(prev => prev.filter(id => id !== attId));
+    const newScreenshots = screenshots.filter(id => id !== attId);
+    setScreenshots(newScreenshots);
+    // Auto-save removal
+    if (node) {
+      try {
+        const currentFields = node.fields || {};
+        await updateNode(node.id, {
+          fields: {
+            ...currentFields,
+            protocolText: typeof currentFields.protocolText === 'string' ? currentFields.protocolText : protocolText,
+            decisions: Array.isArray(currentFields.decisions) ? currentFields.decisions : decisions,
+            screenshots: newScreenshots,
+          },
+        });
+        initialSnapshot.current = JSON.stringify({
+          name: node.name,
+          branchType: node.branchType || '__none__',
+          fields: { ...currentFields, screenshots: newScreenshots },
+        });
+      } catch { /* best-effort */ }
+    }
     try { await api.deleteFile(attId); } catch { /* best-effort cleanup */ }
   };
 

@@ -292,15 +292,29 @@ export function ProjectTreeView() {
     }
   }, [nodes, updateNode, loadAllData, toast, findNodeInTree, isDescendantInTree]);
 
-  // Filter projects
+  // Filter and sort projects: by status priority, then alphabetically
   const filteredProjects = useMemo(() => {
-    if (!searchQuery.trim()) return projects;
-    const q = searchQuery.toLowerCase();
-    return projects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q)
-    );
+    const STATUS_ORDER: Record<string, number> = {
+      active: 0,
+      paused: 1,
+      completed: 2,
+      archived: 3,
+    };
+    let result = projects;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.description?.toLowerCase().includes(q)
+      );
+    }
+    return [...result].sort((a, b) => {
+      const orderA = STATUS_ORDER[a.status] ?? 99;
+      const orderB = STATUS_ORDER[b.status] ?? 99;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.name.localeCompare(b.name, 'ru');
+    });
   }, [projects, searchQuery]);
 
   // Reload handler for child components

@@ -1,24 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/options';
-import { db } from '@/lib/db';
 import { readFile, unlink } from 'fs/promises';
-import path from 'path';
+import { join } from 'path';
+import { existsSync } from 'fs';
+import { getCurrentUser } from '@/lib/session';
+import { db } from '@/lib/db';
 
-function getUploadDir(): string {
-  return process.env.UPLOAD_DIR || path.join(process.cwd(), 'data', 'uploads');
-}
-
-// GET — download file
+// GET /api/files/[id] — скачать файл
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
-  }
-
   const { id } = await params;
 
   try {
@@ -27,32 +18,33 @@ export async function GET(
       return NextResponse.json({ error: 'Файл не найден' }, { status: 404 });
     }
 
-    const filePath = path.join(getUploadDir(), attachment.nodeId, attachment.fileName);
+    const filePath = join(process.cwd(), 'uploads', attachment.fileName);
+    if (!existsSync(filePath)) {
+      return NextResponse.json({ error: 'Файл на диске не найден' }, { status: 404 });
+    }
+
     const buffer = await readFile(filePath);
 
     return new NextResponse(buffer, {
       headers: {
-        'Content-Type': attachment.mimeType,
-        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(attachment.originalName)}`,
-        'Content-Length': String(buffer.length),
+        'Content-Type': attachment.mimeType || 'application/octet-stream',
+        'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(attachment.originalName)}`,
+        'Content-Length': String(attachment.size),
       },
     });
-  } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      return NextResponse.json({ error: 'Файл не найден на диске' }, { status: 404 });
-    }
-    console.error('File download error:', error);
-    return NextResponse.json({ error: 'Ошибка скачивания' }, { status: 500 });
+  } catch (error) {
+    console.error('Error serving file:', error);
+    return NextResponse.json({ error: 'Ошибка получения файла' }, { status: 500 });
   }
 }
 
-// DELETE — delete file
+// DELETE /api/files/[id] — удалить файл
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ error: 'Не авторизован' }, { status: 401 });
   }
 
@@ -64,20 +56,27 @@ export async function DELETE(
       return NextResponse.json({ error: 'Файл не найден' }, { status: 404 });
     }
 
-    // Delete from disk
-    try {
-      const filePath = path.join(getUploadDir(), attachment.nodeId, attachment.fileName);
-      await unlink(filePath);
-    } catch {
-      // File might already be deleted from disk
+    // Проверяем права доступа через проект
+    const node = await db.node.findUnique({ where: { id: attachment.nodeId } });
+    if (node) {
+      const project = await db.project.findUnique({ where: { id: node.projectId } });
+      if (project && user.role !== 'admin' && project.userId !== user.id) {
+        return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 });
+      }
     }
 
-    // Delete from DB
+    // Удаляем с диска
+    const filePath = join(process.cwd(), 'uploads', attachment.fileName);
+    if (existsSync(filePath)) {
+      await unlink(filePath).catch(() => {});
+    }
+
+    // Удаляем из БД
     await db.fileAttachment.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('File delete error:', error);
+    console.error('Error deleting file:', error);
     return NextResponse.json({ error: 'Ошибка удаления файла' }, { status: 500 });
   }
 }

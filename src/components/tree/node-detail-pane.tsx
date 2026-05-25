@@ -297,66 +297,53 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     const text = typeof f.protocolText === 'string' ? f.protocolText : '';
     const decs = Array.isArray(f.decisions) ? f.decisions : [];
 
+    const esc = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
     const decisionsRows = decs.map((d: any, i: number) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${String(d.task || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
-          <td>${String(d.deadline || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
-          <td>${String(d.responsible || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
-          <td>${String(d.comment || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
-        </tr>`).join('');
+          <tr>
+            <td style="text-align:center; color:#64748b; font-weight:500; width:30px;">${i + 1}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; color:#1e293b; vertical-align:top;">${esc(d.task)}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; color:#1e293b; vertical-align:top; white-space:nowrap;">${esc(d.deadline)}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; color:#1e293b; vertical-align:top; white-space:nowrap;">${esc(d.responsible)}</td>
+            <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; color:#475569; vertical-align:top;">${esc(d.comment)}</td>
+          </tr>`).join('');
+
+    const dateStr = node.createdAt
+      ? new Date(node.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
+      : '';
 
     const html = `<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>${name.replace(/</g, '&lt;')}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1a1a2e; background: #f8f9fa; }
-    .container { max-width: 900px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 16px rgba(0,0,0,0.08); padding: 48px; }
-    h1 { font-size: 24px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; border-bottom: 3px solid #3b82f6; padding-bottom: 12px; }
-    .date { font-size: 13px; color: #64748b; margin-bottom: 32px; }
-    .section-title { font-size: 16px; font-weight: 600; color: #334155; margin: 28px 0 12px 0; }
-    .description { font-size: 14px; line-height: 1.7; color: #475569; white-space: pre-wrap; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
-    thead th { background: #f1f5f9; color: #334155; font-weight: 600; text-align: left; padding: 10px 14px; border-bottom: 2px solid #e2e8f0; }
-    thead th:first-child { text-align: center; width: 40px; }
-    tbody td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; color: #475569; vertical-align: top; }
-    tbody td:first-child { text-align: center; color: #94a3b8; font-weight: 500; }
-    tbody tr:last-child td { border-bottom: none; }
-    tbody tr:hover { background: #f8fafc; }
-    .no-decisions { color: #94a3b8; font-style: italic; font-size: 14px; }
-    .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8; text-align: right; }
-    @media print { body { padding: 0; background: #fff; } .container { box-shadow: none; padding: 20px; } }
-  </style>
+  <title>${esc(name)}</title>
 </head>
-<body>
-  <div class="container">
-    <h1>${name.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h1>
-    <div class="date">${node.createdAt ? new Date(node.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' }) : ''}</div>
+<body style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; font-size:14px; color:#1e293b; line-height:1.5; padding:20px; background:#fff;">
 
-    ${text ? `<div class="section-title">Описание</div>
-    <div class="description">${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+  <h1 style="font-size:18px; font-weight:700; color:#1e293b; margin:0 0 4px 0;">${esc(name)}</h1>
+  ${dateStr ? `<p style="font-size:12px; color:#64748b; margin:0 0 20px 0;">${dateStr}</p>` : ''}
 
-    <div class="section-title">Решения</div>
-    ${decs.length > 0 ? `
-    <table>
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Задача / Решение</th>
-          <th>Срок</th>
-          <th>Ответственный</th>
-          <th>Комментарий</th>
-        </tr>
-      </thead>
-      <tbody>${decisionsRows}
-      </tbody>
-    </table>` : '<p class="no-decisions">Нет решений</p>'}
+  ${text ? `
+  <p style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 8px 0;">Описание</p>
+  <p style="font-size:14px; line-height:1.6; color:#334155; margin:0 0 16px 0; white-space:pre-wrap;">${esc(text)}</p>` : ''}
 
-    <div class="footer">ProjectHub</div>
-  </div>
+  <p style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 8px 0;">Решения</p>
+  ${decs.length > 0 ? `
+  <table style="width:100%; border-collapse:collapse; font-size:13px; border:1px solid #cbd5e1;">
+    <thead>
+      <tr style="background:#f1f5f9;">
+        <th style="text-align:center; width:30px; padding:8px 6px; border-bottom:2px solid #cbd5e1; border-right:1px solid #e2e8f0; color:#475569; font-weight:600; font-size:12px;">#</th>
+        <th style="text-align:left; padding:8px 12px; border-bottom:2px solid #cbd5e1; border-right:1px solid #e2e8f0; color:#475569; font-weight:600; font-size:12px;">Задача / Решение</th>
+        <th style="text-align:left; padding:8px 12px; border-bottom:2px solid #cbd5e1; border-right:1px solid #e2e8f0; color:#475569; font-weight:600; font-size:12px;">Срок</th>
+        <th style="text-align:left; padding:8px 12px; border-bottom:2px solid #cbd5e1; border-right:1px solid #e2e8f0; color:#475569; font-weight:600; font-size:12px;">Ответственный</th>
+        <th style="text-align:left; padding:8px 12px; border-bottom:2px solid #cbd5e1; color:#475569; font-weight:600; font-size:12px;">Комментарий</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${decisionsRows}
+    </tbody>
+  </table>` : `<p style="color:#94a3b8; font-style:italic; margin:0;">Нет решений</p>`}
+
 </body>
 </html>`;
 

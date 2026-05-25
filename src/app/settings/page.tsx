@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,12 +13,14 @@ import { api } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
 import { ElementTypesManager } from '@/components/settings/element-types-manager';
+import { TaskTypesManager } from '@/components/settings/task-types-manager';
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { data: session, status } = useSession();
   const { toast } = useToast();
+  const currentUser = useAppStore((s) => s.currentUser);
   const elementTypes = useAppStore((s) => s.elementTypes);
+  const taskTypes = useAppStore((s) => s.taskTypes);
   const loadAllData = useAppStore((s) => s.loadAllData);
 
   const [maxFileSizeMb, setMaxFileSizeMb] = useState('10');
@@ -27,20 +28,30 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const userRole = (session?.user as any)?.role;
-  const isAdmin = userRole === 'admin';
+  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/login');
+    // If no current user, try to fetch via API
+    if (!currentUser) {
+      api.getMe()
+        .then((user) => {
+          useAppStore.getState().setCurrentUser({
+            id: user.id,
+            username: user.username,
+            role: user.role,
+          });
+        })
+        .catch(() => {
+          router.push('/login');
+        });
       return;
     }
-    if (status === 'authenticated' && !isAdmin) return;
-    if (status === 'authenticated' && isAdmin) {
-      loadSettings();
-      loadAllData();
-    }
-  }, [status, isAdmin]);
+
+    if (!isAdmin) return;
+
+    loadSettings();
+    loadAllData();
+  }, [currentUser, isAdmin, router, loadAllData]);
 
   const loadSettings = async () => {
     setLoading(true);
@@ -72,7 +83,8 @@ export default function SettingsPage() {
     }
   };
 
-  if (status === 'loading') {
+  // Waiting for user data to load
+  if (!currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -151,6 +163,16 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <ElementTypesManager elementTypes={elementTypes} onTypesChanged={loadAllData} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Типы задач</CardTitle>
+                <CardDescription>Цветовые метки для категоризации задач</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TaskTypesManager taskTypes={taskTypes} onTypesChanged={loadAllData} />
               </CardContent>
             </Card>
           </>

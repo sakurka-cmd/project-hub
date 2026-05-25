@@ -1,4 +1,4 @@
-import type { Project, ProjectNode, ElementType, AllDataResponse, FileAttachment } from '@/types';
+import type { Project, ProjectNode, ElementType, TaskType, AllDataResponse, FileAttachment } from '@/types';
 
 const BASE = '/api';
 
@@ -17,6 +17,9 @@ async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   // ==================== AUTH ====================
+  getMe: () =>
+    fetchJSON<{ id: string; username: string; role: string }>(`${BASE}/me`),
+
   register: (data: { username: string; password: string }) =>
     fetchJSON<{ id: string; username: string; role: string }>(`${BASE}/register`, {
       method: 'POST',
@@ -82,20 +85,23 @@ export const api = {
     projectId: string;
     parentId?: string | null;
     name: string;
-    nodeType: 'branch' | 'item';
+    nodeType: 'branch' | 'item' | 'task' | 'protocol';
     branchType?: string | null;
     elementTypeId?: string | null;
+    taskTypeId?: string | null;
     fields?: Record<string, unknown>;
     order?: number;
   }) =>
     fetchJSON<ProjectNode>(`${BASE}/nodes`, { method: 'POST', body: JSON.stringify(data) }),
   updateNode: (id: string, data: {
     name?: string;
-    nodeType?: 'branch' | 'item';
+    nodeType?: 'branch' | 'item' | 'task' | 'protocol';
     branchType?: string | null;
     fields?: Record<string, unknown>;
     order?: number;
     parentId?: string | null;
+    completed?: boolean;
+    taskTypeId?: string | null;
   }) =>
     fetchJSON<ProjectNode>(`${BASE}/nodes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteNode: (id: string) =>
@@ -113,4 +119,13 @@ export const api = {
     fetchJSON<ElementType>(`${BASE}/element-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteElementType: (id: string) =>
     fetch(`${BASE}/element-types/${id}`, { method: 'DELETE' }).then((r) => r.json()),
+
+  // ==================== TASK TYPES ====================
+  getTaskTypes: () => fetchJSON<TaskType[]>(`${BASE}/task-types`),
+  createTaskType: (data: Partial<TaskType>) =>
+    fetchJSON<TaskType>(`${BASE}/task-types`, { method: 'POST', body: JSON.stringify(data) }),
+  updateTaskType: (id: string, data: Partial<TaskType>) =>
+    fetchJSON<TaskType>(`${BASE}/task-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteTaskType: (id: string) =>
+    fetch(`${BASE}/task-types/${id}`, { method: 'DELETE' }).then((r) => r.json()),
 };

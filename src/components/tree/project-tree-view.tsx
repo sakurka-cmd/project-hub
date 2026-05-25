@@ -55,6 +55,8 @@ import {
   FileText,
   X,
   Palette,
+  ListTodo,
+  ClipboardList,
 } from 'lucide-react';
 
 // Count all nodes recursively
@@ -122,10 +124,12 @@ export function ProjectTreeView() {
 
   // Inline root-node creation
   const [addingToProject, setAddingToProject] = useState<string | null>(null);
-  const [addRootType, setAddRootType] = useState<'branch' | 'item'>('branch');
+  const [addRootType, setAddRootType] = useState<'branch' | 'item' | 'task' | 'protocol'>('branch');
   const [newRootName, setNewRootName] = useState('');
   const [selectedElementTypeId, setSelectedElementTypeId] = useState<string | null>(null);
+  const [selectedTaskTypeId, setSelectedTaskTypeId] = useState<string | null>(null);
   const elementTypes = useAppStore((s) => s.elementTypes);
+  const taskTypes = useAppStore((s) => s.taskTypes);
 
   // DnD sensors
   const sensors = useSensors(
@@ -211,12 +215,22 @@ export function ProjectTreeView() {
     setDeleteProjectId(null);
   };
 
-  const handleStartAddRoot = (projectId: string, type: 'branch' | 'item') => {
+  const handleStartAddRoot = (projectId: string, type: 'branch' | 'item' | 'task' | 'protocol') => {
     setAddingToProject(projectId);
     setAddRootType(type);
-    setNewRootName('');
     setSelectedElementTypeId(null);
+    setSelectedTaskTypeId(null);
     if (!expandedProjects.has(projectId)) toggleProject(projectId);
+    // Auto-fill date for protocols
+    if (type === 'protocol') {
+      const now = new Date();
+      const dd = String(now.getDate()).padStart(2, '0');
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const yyyy = now.getFullYear();
+      setNewRootName(`Протокол от ${dd}.${mm}.${yyyy}`);
+    } else {
+      setNewRootName('');
+    }
   };
 
   const handleSubmitRootNode = async (projectId: string) => {
@@ -234,11 +248,20 @@ export function ProjectTreeView() {
           }
         }
       }
-      await createNode({ projectId, name, nodeType: addRootType, elementTypeId, fields });
+      let taskTypeId: string | null = null;
+      if (addRootType === 'task' && selectedTaskTypeId) {
+        taskTypeId = selectedTaskTypeId;
+      }
+      if (addRootType === 'protocol') {
+        fields = { protocolText: '', decisions: [] };
+      }
+      await createNode({ projectId, name, nodeType: addRootType, elementTypeId, taskTypeId, fields });
       setNewRootName('');
       setSelectedElementTypeId(null);
+      setSelectedTaskTypeId(null);
       setAddingToProject(null);
-      toast({ title: addRootType === 'branch' ? 'Ветка создана' : 'Элемент создан' });
+      const labels: Record<string, string> = { branch: 'Ветка создана', item: 'Элемент создан', task: 'Задача создана', protocol: 'Протокол создан' };
+      toast({ title: labels[addRootType] });
     } catch (err: any) {
       console.error('handleSubmitRootNode error:', err);
       toast({
@@ -602,12 +625,34 @@ export function ProjectTreeView() {
                           <FileText className="h-3 w-3" />
                           Элемент
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => handleStartAddRoot(project.id, 'task')}
+                        >
+                          <ListTodo className="h-3 w-3" />
+                          Задача
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => handleStartAddRoot(project.id, 'protocol')}
+                        >
+                          <ClipboardList className="h-3 w-3" />
+                          Протокол
+                        </Button>
                       </div>
                     ) : null}
                     {/* Inline add root node */}
                     {addingToProject === project.id && (
                       <div className="flex items-center gap-1.5 px-2 py-1">
-                        {addRootType === 'branch' ? (
+                        {addRootType === 'task' ? (
+                          <ListTodo className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        ) : addRootType === 'protocol' ? (
+                          <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        ) : addRootType === 'branch' ? (
                           <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
                         ) : (
                           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -624,6 +669,18 @@ export function ProjectTreeView() {
                             ))}
                           </select>
                         )}
+                        {addRootType === 'task' && taskTypes.length > 0 && (
+                          <select
+                            value={selectedTaskTypeId || ''}
+                            onChange={(e) => setSelectedTaskTypeId(e.target.value || null)}
+                            className="h-7 text-xs rounded-md border bg-background px-1.5 shrink-0 max-w-[120px]"
+                          >
+                            <option value="">Без типа</option>
+                            {taskTypes.map((tt) => (
+                              <option key={tt.id} value={tt.id}>{tt.name}</option>
+                            ))}
+                          </select>
+                        )}
                         <Input
                           autoFocus
                           value={newRootName}
@@ -632,7 +689,11 @@ export function ProjectTreeView() {
                             if (e.key === 'Enter') handleSubmitRootNode(project.id);
                             if (e.key === 'Escape') { setAddingToProject(null); setSelectedElementTypeId(null); }
                           }}
-                          placeholder={addRootType === 'branch' ? 'Название ветки...' : 'Название элемента...'}
+                          placeholder={
+                            addRootType === 'protocol' ? 'Название протокола...'
+                              : addRootType === 'branch' ? 'Название ветки...'
+                              : 'Название элемента...'
+                          }
                           className="h-7 text-sm"
                         />
                         <Button
@@ -693,6 +754,24 @@ export function ProjectTreeView() {
                         >
                           <Plus className="h-3 w-3 mr-1" />
                           Добавить элемент
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => handleStartAddRoot(project.id, 'task')}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Задачу
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => handleStartAddRoot(project.id, 'protocol')}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Протокол
                         </Button>
                       </div>
                     )}

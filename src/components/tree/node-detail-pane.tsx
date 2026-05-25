@@ -47,6 +47,7 @@ import {
   Loader2,
   ClipboardList,
   Save,
+  ImageIcon,
 } from 'lucide-react';
 
 interface NodeDetailPaneProps {
@@ -89,6 +90,8 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
   // Protocol-specific state
   const [protocolText, setProtocolText] = useState('');
   const [decisions, setDecisions] = useState<DecisionRow[]>([]);
+  const [screenshots, setScreenshots] = useState<string[]>([]); // attachment IDs
+  const [pastingScreenshot, setPastingScreenshot] = useState(false);
 
   // File attachments
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
@@ -123,6 +126,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
         } else {
           setDecisions([]);
         }
+        setScreenshots(Array.isArray(f.screenshots) ? f.screenshots.filter((s: unknown) => typeof s === 'string') : []);
         setFields([]);
       } else {
         setProtocolText('');
@@ -155,6 +159,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     if (isProtocol) {
       current.protocolText = protocolText;
       current.decisions = decisions;
+      current.screenshots = screenshots;
     } else {
       const fieldMap: Record<string, unknown> = {};
       for (const f of fields) {
@@ -195,6 +200,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
           fields: {
             protocolText,
             decisions,
+            screenshots,
           },
         });
       } else if (isTask) {
@@ -233,6 +239,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
       if (isProtocol) {
         snap.protocolText = protocolText;
         snap.decisions = decisions;
+        snap.screenshots = screenshots;
       } else if (!isTask) {
         const fieldMap: Record<string, unknown> = {};
         for (const f of fields) {
@@ -291,13 +298,68 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     }
   };
 
-  const handleExportProtocol = () => {
+  // --- Screenshot paste handler ---
+  const handlePasteScreenshot = useCallback(async (e: React.ClipboardEvent) => {
+    if (!node || !isProtocol) return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageItem = items.find(item => item.type.startsWith('image/'));
+    if (!imageItem) return;
+    e.preventDefault();
+
+    const file = imageItem.getAsFile();
+    if (!file) return;
+
+    // Build a named file for upload
+    const ext = file.type.split('/')[1] || 'png';
+    const now = new Date();
+    const stamp = [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0'), String(now.getHours()).padStart(2,'0'), String(now.getMinutes()).padStart(2,'0'), String(now.getSeconds()).padStart(2,'0')].join('-');
+    const namedFile = new File([file], `screenshot-${stamp}.${ext}`, { type: file.type });
+
+    setPastingScreenshot(true);
+    try {
+      const att = await api.uploadFile(node.id, namedFile);
+      setScreenshots(prev => [...prev, att.id]);
+      toast({ title: 'Скриншот добавлен' });
+    } catch (err: any) {
+      toast({ title: 'Ошибка вставки', description: err?.message || 'Не удалось загрузить скриншот', variant: 'destructive' });
+    } finally {
+      setPastingScreenshot(false);
+    }
+  }, [node, isProtocol, toast]);
+
+  const handleRemoveScreenshot = async (attId: string) => {
+    setScreenshots(prev => prev.filter(id => id !== attId));
+    try { await api.deleteFile(attId); } catch { /* best-effort cleanup */ }
+  };
+
+  // --- Protocol export (async — fetches screenshots as base64) ---
+  const handleExportProtocol = async () => {
     if (!node || node.nodeType !== 'protocol') return;
     const f = node.fields;
     const text = typeof f.protocolText === 'string' ? f.protocolText : '';
     const decs = Array.isArray(f.decisions) ? f.decisions : [];
+    const shotIds = Array.isArray(f.screenshots) ? f.screenshots : [];
 
     const esc = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Fetch screenshots as base64 data-URIs
+    const imgTags: string[] = [];
+    for (const id of shotIds) {
+      try {
+        const res = await fetch(api.getFileUrl(id), { credentials: 'include' });
+        const blob = await res.blob();
+        const dataUri = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        imgTags.push(`<img src="${dataUri}" style="max-width:100%; border:1px solid #e2e8f0; border-radius:4px; margin:6px 0; display:block;" />`);
+      } catch { /* skip failed */ }
+    }
 
     const decisionsRows = decs.map((d: any, i: number) => `
           <tr>
@@ -312,20 +374,17 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
       ? new Date(node.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
       : '';
 
-    const html = `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>${esc(name)}</title>
-</head>
-<body style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; font-size:14px; color:#1e293b; line-height:1.5; padding:20px; background:#fff;">
-
+    const contentHtml = `
   <h1 style="font-size:18px; font-weight:700; color:#1e293b; margin:0 0 4px 0;">${esc(name)}</h1>
   ${dateStr ? `<p style="font-size:12px; color:#64748b; margin:0 0 20px 0;">${dateStr}</p>` : ''}
 
   ${text ? `
   <p style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 8px 0;">Описание</p>
   <p style="font-size:14px; line-height:1.6; color:#334155; margin:0 0 16px 0; white-space:pre-wrap;">${esc(text)}</p>` : ''}
+
+  ${imgTags.length > 0 ? `
+  <p style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 8px 0;">Скриншоты</p>
+  ${imgTags.join('\n')}` : ''}
 
   <p style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 8px 0;">Решения</p>
   ${decs.length > 0 ? `
@@ -342,8 +401,52 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     <tbody>
       ${decisionsRows}
     </tbody>
-  </table>` : `<p style="color:#94a3b8; font-style:italic; margin:0;">Нет решений</p>`}
+  </table>` : `<p style="color:#94a3b8; font-style:italic; margin:0;">Нет решений</p>`}`;
 
+    const html = `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>${esc(name)}</title>
+</head>
+<body style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; font-size:14px; color:#1e293b; line-height:1.5; padding:20px; background:#fff;">
+
+  <div style="margin-bottom:16px; display:flex; gap:8px;">
+    <button onclick="copyProtocol()" id="copyBtn" style="padding:6px 16px; font-size:13px; font-family:inherit; cursor:pointer; border:1px solid #cbd5e1; border-radius:6px; background:#f8fafc; color:#334155;">Копировать в буфер обмена</button>
+  </div>
+  <div id="content">${contentHtml}</div>
+
+  <script>
+  function copyProtocol() {
+    var content = document.getElementById('content');
+    var html = content.innerHTML;
+    var btn = document.getElementById('copyBtn');
+    if (navigator.clipboard && navigator.clipboard.write) {
+      navigator.clipboard.write([
+        new ClipboardItem({ 'text/html': new Blob([html], {type:'text/html'}) })
+      ]).then(function() {
+        btn.textContent = 'Скопировано!';
+        setTimeout(function(){ btn.textContent = 'Копировать в буфер обмена'; }, 2000);
+      }).catch(function() {
+        fallbackCopy(content);
+      });
+    } else {
+      fallbackCopy(content);
+    }
+  }
+  function fallbackCopy(el) {
+    var range = document.createRange();
+    range.selectNodeContents(el);
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    sel.removeAllRanges();
+    var btn = document.getElementById('copyBtn');
+    btn.textContent = 'Скопировано!';
+    setTimeout(function(){ btn.textContent = 'Копировать в буфер обмена'; }, 2000);
+  }
+  <\/script>
 </body>
 </html>`;
 
@@ -500,7 +603,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
 
           {/* ========== PROTOCOL-SPECIFIC SECTION ========== */}
           {isProtocol && (
-            <>
+            <div onPaste={handlePasteScreenshot}>
               {/* Protocol text */}
               <div className="flex flex-col gap-1.5">
                 <Label>Текст протокола</Label>
@@ -511,6 +614,51 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
                   className="text-sm min-h-[120px] resize-y"
                   rows={6}
                 />
+              </div>
+
+              {/* Screenshots section */}
+              <div className="flex flex-col gap-2 mt-5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Скриншоты</Label>
+                  <span className="text-xs text-muted-foreground">Ctrl+V для вставки</span>
+                </div>
+
+                {pastingScreenshot && (
+                  <div className="flex items-center gap-2 py-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">Вставка скриншота...</span>
+                  </div>
+                )}
+
+                {screenshots.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {screenshots.map((attId) => (
+                      <div key={attId} className="relative group rounded-lg border overflow-hidden bg-muted/20">
+                        <img
+                          src={api.getFileUrl(attId)}
+                          alt="Скриншот"
+                          className="w-full h-auto max-h-48 object-contain bg-white"
+                        />
+                        <button
+                          onClick={() => handleRemoveScreenshot(attId)}
+                          className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive"
+                          title="Удалить скриншот"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {screenshots.length === 0 && !pastingScreenshot && (
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                    <ImageIcon className="h-6 w-6 mx-auto text-muted-foreground/50 mb-1" />
+                    <p className="text-sm text-muted-foreground">
+                      Вставьте скриншот из буфера обмена (Ctrl+V)
+                    </p>
+                  </div>
+                )}
               </div>
 
               <Separator />
@@ -604,7 +752,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
               </div>
 
               <Separator />
-            </>
+            </div>
           )}
 
           {/* ========== GENERIC FIELDS SECTION (for items only) ========== */}

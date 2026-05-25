@@ -1,4 +1,4 @@
-import type { Project, ProjectNode, AllDataResponse, FileAttachment } from '@/types';
+import type { Project, ProjectNode, ElementType, AllDataResponse, FileAttachment } from '@/types';
 
 const BASE = '/api';
 
@@ -84,6 +84,7 @@ export const api = {
     name: string;
     nodeType: 'branch' | 'item';
     branchType?: string | null;
+    elementTypeId?: string | null;
     fields?: Record<string, unknown>;
     order?: number;
   }) =>
@@ -103,4 +104,13 @@ export const api = {
   // ==================== EXPORT ====================
   exportBranch: (id: string) =>
     fetchJSON<{ branchName: string; columns: string[]; rows: Record<string, unknown>[] }>(`${BASE}/nodes/${id}/export`),
+
+  // ==================== ELEMENT TYPES ====================
+  getElementTypes: () => fetchJSON<ElementType[]>(`${BASE}/element-types`),
+  createElementType: (data: Partial<ElementType>) =>
+    fetchJSON<ElementType>(`${BASE}/element-types`, { method: 'POST', body: JSON.stringify(data) }),
+  updateElementType: (id: string, data: Partial<ElementType>) =>
+    fetchJSON<ElementType>(`${BASE}/element-types/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteElementType: (id: string) =>
+    fetch(`${BASE}/element-types/${id}`, { method: 'DELETE' }).then((r) => r.json()),
 };

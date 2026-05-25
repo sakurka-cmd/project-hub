@@ -62,9 +62,19 @@ export async function GET() {
       _count: undefined,
     }));
 
+    // Element types
+    const elementTypes = await db.elementType.findMany({
+      orderBy: { createdAt: 'asc' },
+    }).map((t) => {
+      let fields = [];
+      try { fields = JSON.parse(t.fields); } catch { fields = []; }
+      return { ...t, fields };
+    });
+
     return NextResponse.json({
       projects: projectsWithCount,
       nodes: rootNodes.map(parseNodeFields),
+      elementTypes,
     });
   } catch (error) {
     console.error('Error fetching all data:', error);

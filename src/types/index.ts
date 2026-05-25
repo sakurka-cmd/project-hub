@@ -29,6 +29,7 @@ export interface ProjectNode {
   name: string;
   nodeType: 'branch' | 'item';
   branchType: string | null;
+  elementTypeId: string | null;
   fields: Record<string, unknown>;
   order: number;
   createdAt: string;
@@ -53,10 +54,27 @@ export interface SystemSetting {
   value: string;
 }
 
+// ==================== ТИПЫ ЭЛЕМЕНТОВ ====================
+export interface ElementTypeField {
+  key: string;
+  defaultValue: string;
+}
+
+export interface ElementType {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  fields: ElementTypeField[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ==================== UNIFIED DATA RESPONSE ====================
 export interface AllDataResponse {
   projects: Project[];
   nodes: ProjectNode[];
+  elementTypes: ElementType[];
 }
 
 // ==================== SESSION EXTENSIONS ====================

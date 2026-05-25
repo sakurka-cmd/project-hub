@@ -5,12 +5,13 @@ import type { ProjectNode } from '@/types';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { openExportTable } from '@/lib/export-table';
+import { useAppStore } from '@/lib/store';
+import { useToast } from '@/hooks/use-toast';
 import {
   BRANCH_TYPE_LABELS,
   BRANCH_TYPE_COLORS,
 } from '@/lib/constants';
-import { useAppStore } from '@/lib/store';
-import { useToast } from '@/hooks/use-toast';
+import type { ElementType } from '@/types';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -83,6 +84,7 @@ export function NodeRow({
 }: NodeRowProps) {
   const { toast } = useToast();
   const createNode = useAppStore((s) => s.createNode);
+  const elementTypes = useAppStore((s) => s.elementTypes);
 
   const isBranch = node.nodeType === 'branch';
   const isExpanded = expanded.has(node.id);
@@ -92,6 +94,7 @@ export function NodeRow({
 
   const [isAddingChild, setIsAddingChild] = useState(false);
   const [addChildType, setAddChildType] = useState<'branch' | 'item'>('item');
+  const [selectedElementTypeId, setSelectedElementTypeId] = useState<string | null>(null);
   const [newChildName, setNewChildName] = useState('');
   const [duplicating, setDuplicating] = useState(false);
 
@@ -176,29 +179,38 @@ export function NodeRow({
     const name = newChildName.trim();
     if (!name) return;
     try {
+      let fields: Record<string, unknown> = {};
+      let elementTypeId: string | null = null;
+      if (selectedElementTypeId) {
+        const et = elementTypes.find((t) => t.id === selectedElementTypeId);
+        if (et) {
+          elementTypeId = et.id;
+          for (const f of et.fields) {
+            fields[f.key] = f.defaultValue;
+          }
+        }
+      }
       await createNode({
         projectId,
         parentId: node.id,
         name,
         nodeType: addChildType,
-        branchType: addChildType === 'branch' ? null : undefined,
-        fields: {},
+        elementTypeId,
+        fields,
       });
       setNewChildName('');
+      setSelectedElementTypeId(null);
       setIsAddingChild(false);
       toast({ title: addChildType === 'branch' ? 'Ветка создана' : 'Элемент создан' });
     } catch {
-      toast({
-        title: 'Ошибка создания',
-        description: 'Не удалось создать узел',
-        variant: 'destructive',
-      });
+      toast({ title: 'Ошибка создания', description: 'Не удалось создать узел', variant: 'destructive' });
     }
   };
 
   const handleCancelAddChild = () => {
     setIsAddingChild(false);
     setNewChildName('');
+    setSelectedElementTypeId(null);
   };
 
   const fieldEntries = Object.entries(node.fields).slice(0, 3);
@@ -453,6 +465,18 @@ export function NodeRow({
                 <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
               ) : (
                 <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )}
+              {addChildType === 'item' && elementTypes.length > 0 && (
+                <select
+                  value={selectedElementTypeId || ''}
+                  onChange={(e) => setSelectedElementTypeId(e.target.value || null)}
+                  className="h-7 text-xs rounded-md border bg-background px-1.5 shrink-0 max-w-[120px]"
+                >
+                  <option value="">Произвольный</option>
+                  {elementTypes.map((et) => (
+                    <option key={et.id} value={et.id}>{et.name}</option>
+                  ))}
+                </select>
               )}
               <Input
                 autoFocus

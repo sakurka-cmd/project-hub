@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Project, ProjectNode } from '@/types';
+import type { Project, ProjectNode, ElementType } from '@/types';
 import { api } from '@/lib/api';
 import { signOut } from 'next-auth/react';
 
@@ -21,6 +21,7 @@ interface AppState {
   // Data
   projects: Project[];
   nodes: ProjectNode[];
+  elementTypes: ElementType[];
   loading: boolean;
 
   // Current user
@@ -43,6 +44,7 @@ interface AppState {
     name: string;
     nodeType: 'branch' | 'item';
     branchType?: string | null;
+    elementTypeId?: string | null;
     fields?: Record<string, unknown>;
     order?: number;
   }) => Promise<void>;
@@ -100,6 +102,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Data
   projects: [],
   nodes: [],
+  elementTypes: [],
   loading: false,
 
   // Current user
@@ -118,6 +121,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         projects: data.projects,
         nodes: data.nodes,
+        elementTypes: data.elementTypes || [],
         loading: false,
       });
     } catch (e) {

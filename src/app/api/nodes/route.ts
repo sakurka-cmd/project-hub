@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { projectId, parentId, name, nodeType, branchType, fields, order } = body;
+    const { projectId, parentId, name, nodeType, branchType, elementTypeId, fields, order } = body;
 
     if (!projectId || !name) {
       return NextResponse.json({ error: 'projectId and name are required' }, { status: 400 });
@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
         name,
         nodeType: nodeType || 'item',
         branchType: branchType || null,
+        elementTypeId: elementTypeId || null,
         fields: fields ? JSON.stringify(fields) : '{}',
         order: nodeOrder,
       },

@@ -124,6 +124,8 @@ export function ProjectTreeView() {
   const [addingToProject, setAddingToProject] = useState<string | null>(null);
   const [addRootType, setAddRootType] = useState<'branch' | 'item'>('branch');
   const [newRootName, setNewRootName] = useState('');
+  const [selectedElementTypeId, setSelectedElementTypeId] = useState<string | null>(null);
+  const elementTypes = useAppStore((s) => s.elementTypes);
 
   // DnD sensors
   const sensors = useSensors(
@@ -213,6 +215,7 @@ export function ProjectTreeView() {
     setAddingToProject(projectId);
     setAddRootType(type);
     setNewRootName('');
+    setSelectedElementTypeId(null);
     if (!expandedProjects.has(projectId)) toggleProject(projectId);
   };
 
@@ -220,8 +223,20 @@ export function ProjectTreeView() {
     const name = newRootName.trim();
     if (!name) return;
     try {
-      await createNode({ projectId, name, nodeType: addRootType, fields: {} });
+      let fields: Record<string, unknown> = {};
+      let elementTypeId: string | null = null;
+      if (selectedElementTypeId) {
+        const et = elementTypes.find((t) => t.id === selectedElementTypeId);
+        if (et) {
+          elementTypeId = et.id;
+          for (const f of et.fields) {
+            fields[f.key] = f.defaultValue;
+          }
+        }
+      }
+      await createNode({ projectId, name, nodeType: addRootType, elementTypeId, fields });
       setNewRootName('');
+      setSelectedElementTypeId(null);
       setAddingToProject(null);
       toast({ title: addRootType === 'branch' ? 'Ветка создана' : 'Элемент создан' });
     } catch (err: any) {
@@ -597,13 +612,25 @@ export function ProjectTreeView() {
                         ) : (
                           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                         )}
+                        {addRootType === 'item' && elementTypes.length > 0 && (
+                          <select
+                            value={selectedElementTypeId || ''}
+                            onChange={(e) => setSelectedElementTypeId(e.target.value || null)}
+                            className="h-7 text-xs rounded-md border bg-background px-1.5 shrink-0 max-w-[120px]"
+                          >
+                            <option value="">Произвольный</option>
+                            {elementTypes.map((et) => (
+                              <option key={et.id} value={et.id}>{et.name}</option>
+                            ))}
+                          </select>
+                        )}
                         <Input
                           autoFocus
                           value={newRootName}
                           onChange={(e) => setNewRootName(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') handleSubmitRootNode(project.id);
-                            if (e.key === 'Escape') setAddingToProject(null);
+                            if (e.key === 'Escape') { setAddingToProject(null); setSelectedElementTypeId(null); }
                           }}
                           placeholder={addRootType === 'branch' ? 'Название ветки...' : 'Название элемента...'}
                           className="h-7 text-sm"

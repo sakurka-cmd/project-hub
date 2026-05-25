@@ -432,8 +432,32 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
           </SheetDescription>
         </SheetHeader>
 
-        {/* Floating save button — appears when there are unsaved changes */}
-        <div className="sticky top-0 z-10 flex justify-end -mt-2 mb-1">
+        {/* Floating action buttons — save appears on changes, export always visible */}
+        <div className="sticky top-0 z-10 flex items-center justify-end gap-2 -mt-2 mb-1">
+          {isBranch && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExport}
+              className="h-8 px-3 text-xs gap-1.5 rounded-full shadow-md border-muted-foreground/20 bg-background/95 backdrop-blur-sm"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Экспорт
+            </Button>
+          )}
+
+          {isProtocol && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExportProtocol}
+              className="h-8 px-3 text-xs gap-1.5 rounded-full shadow-md border-muted-foreground/20 bg-background/95 backdrop-blur-sm"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Экспорт
+            </Button>
+          )}
+
           <Button
             size="sm"
             onClick={handleSave}

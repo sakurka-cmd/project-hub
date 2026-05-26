@@ -377,13 +377,14 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     try { await api.deleteFile(attId); } catch { /* best-effort cleanup */ }
   };
 
-  // --- Protocol export (async — fetches screenshots as base64) ---
+  // --- Protocol export (uses current local state, not DB) ---
   const handleExportProtocol = async () => {
     if (!node || node.nodeType !== 'protocol') return;
-    const f = node.fields;
-    const text = typeof f.protocolText === 'string' ? f.protocolText : '';
-    const decs = Array.isArray(f.decisions) ? f.decisions : [];
-    const shotIds = Array.isArray(f.screenshots) ? f.screenshots : [];
+
+    // Use current local state (what user sees right now), not node.fields
+    const text = protocolText;
+    const decs = decisions;
+    const shotIds = screenshots;
 
     const esc = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -403,7 +404,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
       } catch { /* skip failed */ }
     }
 
-    const decisionsRows = decs.map((d: any, i: number) => `
+    const decisionsRows = decs.map((d, i) => `
           <tr>
             <td style="text-align:center; color:#64748b; font-weight:500; width:30px;">${i + 1}</td>
             <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; color:#1e293b; vertical-align:top;">${esc(d.task)}</td>
@@ -412,25 +413,16 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
             <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; color:#475569; vertical-align:top;">${esc(d.comment)}</td>
           </tr>`).join('');
 
-    const dateStr = node.createdAt
-      ? new Date(node.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })
-      : '';
-
     const contentHtml = `
   <h1 style="font-size:18px; font-weight:700; color:#1e293b; margin:0 0 4px 0;">${esc(name)}</h1>
-  ${dateStr ? `<p style="font-size:12px; color:#64748b; margin:0 0 20px 0;">${dateStr}</p>` : ''}
 
   ${text ? `
-  <p style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 8px 0;">Описание</p>
   <p style="font-size:14px; line-height:1.6; color:#334155; margin:0 0 16px 0; white-space:pre-wrap;">${esc(text)}</p>` : ''}
 
-  ${imgTags.length > 0 ? `
-  <p style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 8px 0;">Скриншоты</p>
-  ${imgTags.join('\n')}` : ''}
+  ${imgTags.length > 0 ? `\n  ${imgTags.join('\n  ')}\n` : ''}
 
-  <p style="font-size:13px; font-weight:600; color:#334155; margin:16px 0 8px 0;">Решения</p>
   ${decs.length > 0 ? `
-  <table style="width:100%; border-collapse:collapse; font-size:13px; border:1px solid #cbd5e1;">
+  <table style="width:100%; border-collapse:collapse; font-size:13px; border:1px solid #cbd5e1; margin-top:16px;">
     <thead>
       <tr style="background:#f1f5f9;">
         <th style="text-align:center; width:30px; padding:8px 6px; border-bottom:2px solid #cbd5e1; border-right:1px solid #e2e8f0; color:#475569; font-weight:600; font-size:12px;">#</th>
@@ -443,7 +435,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     <tbody>
       ${decisionsRows}
     </tbody>
-  </table>` : `<p style="color:#94a3b8; font-style:italic; margin:0;">Нет решений</p>`}`;
+  </table>` : ''}`;
 
     const html = `<!DOCTYPE html>
 <html lang="ru">

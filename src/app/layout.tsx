@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   title: "ProjectHub — Управление проектами",
   description: "Единая платформа для управления проектами, задачами, артефактами и инфраструктурой. Комплексное решение для эффективной работы команды.",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/icon.svg",
   },
 };
 

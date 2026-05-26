@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { Layers, Menu, Settings, Loader2, Plus } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { api } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { UserMenu } from '@/components/auth/user-menu';
 import { Button } from '@/components/ui/button';
@@ -136,11 +137,18 @@ function AuthenticatedApp() {
 
   useEffect(() => {
     if (session?.user) {
-      setCurrentUser({
-        id: (session.user as any).id,
-        username: (session.user as any).username || session.user.name || '',
-        role: (session.user as any).role || 'user',
-      });
+      // Use API to get actual user data (Turbopack standalone loses custom JWT fields)
+      api.getMe()
+        .then((user) => {
+          setCurrentUser({ id: user.id, username: user.username, role: user.role });
+        })
+        .catch(() => {
+          setCurrentUser({
+            id: (session.user as any).id || '',
+            username: (session.user as any).username || session.user.name || '',
+            role: 'user',
+          });
+        });
       loadAllData();
     }
   }, [session, setCurrentUser, loadAllData]);

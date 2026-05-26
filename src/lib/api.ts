@@ -120,6 +120,13 @@ export const api = {
   deleteElementType: (id: string) =>
     fetch(`${BASE}/element-types/${id}`, { method: 'DELETE' }).then((r) => r.json()),
 
+  // ==================== CHANGE PASSWORD ====================
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    fetchJSON<{ success: boolean }>(`${BASE}/change-password`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   // ==================== TASK TYPES ====================
   getTaskTypes: () => fetchJSON<TaskType[]>(`${BASE}/task-types`),
   createTaskType: (data: Partial<TaskType>) =>

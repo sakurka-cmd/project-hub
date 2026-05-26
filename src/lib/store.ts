@@ -30,6 +30,11 @@ interface AppState {
   setCurrentUser: (user: CurrentUser | null) => void;
   logout: () => Promise<void>;
 
+  // UI signals
+  pendingCreateProject: boolean;
+  requestCreateProject: () => void;
+  consumeCreateProjectRequest: () => void;
+
   // Actions
   loadAllData: () => Promise<void>;
 
@@ -108,6 +113,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   elementTypes: [],
   taskTypes: [],
   loading: false,
+
+  // UI signals
+  pendingCreateProject: false,
+  requestCreateProject: () => set({ pendingCreateProject: true }),
+  consumeCreateProjectRequest: () => set({ pendingCreateProject: false }),
 
   // Current user
   currentUser: null,

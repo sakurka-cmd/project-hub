@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { ProjectNode } from '@/types';
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
@@ -11,13 +11,16 @@ import {
   PRESET_COLORS,
 } from '@/lib/constants';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -26,11 +29,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,10 +49,8 @@ import {
   FolderOpen,
   Trash2,
   CirclePlus,
-  Search,
   FileText,
   X,
-  Palette,
   ListTodo,
   ClipboardList,
 } from 'lucide-react';
@@ -83,16 +79,20 @@ export function ProjectTreeView() {
 
   const projects = useAppStore((s) => s.projects);
   const nodes = useAppStore((s) => s.nodes);
+  const elementTypes = useAppStore((s) => s.elementTypes);
+  const taskTypes = useAppStore((s) => s.taskTypes);
   const expandedProjects = useAppStore((s) => s.expandedProjects);
   const loading = useAppStore((s) => s.loading);
   const toggleProject = useAppStore((s) => s.toggleProject);
   const createProject = useAppStore((s) => s.createProject);
-  const updateProject = useAppStore((s) => s.updateProject);
   const deleteProject = useAppStore((s) => s.deleteProject);
   const deleteNode = useAppStore((s) => s.deleteNode);
   const createNode = useAppStore((s) => s.createNode);
   const updateNode = useAppStore((s) => s.updateNode);
+  const updateProject = useAppStore((s) => s.updateProject);
   const loadAllData = useAppStore((s) => s.loadAllData);
+  const pendingCreateProject = useAppStore((s) => s.pendingCreateProject);
+  const consumeCreateProjectRequest = useAppStore((s) => s.consumeCreateProjectRequest);
 
   // Expanded nodes within the tree
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
@@ -106,12 +106,6 @@ export function ProjectTreeView() {
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
   const [creating, setCreating] = useState(false);
 
-  // Color picker state
-  const [colorPickerProjectId, setColorPickerProjectId] = useState<string | null>(null);
-
-  // Status picker state
-  const [statusPickerProjectId, setStatusPickerProjectId] = useState<string | null>(null);
-
   // Delete project confirmation
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
   const projectToDelete = projects.find((p) => p.id === deleteProjectId);
@@ -119,17 +113,38 @@ export function ProjectTreeView() {
   // Delete node confirmation
   const [deleteNodeId, setDeleteNodeId] = useState<string | null>(null);
 
-  // Search filter
-  const [searchQuery, setSearchQuery] = useState('');
-
   // Inline root-node creation
   const [addingToProject, setAddingToProject] = useState<string | null>(null);
   const [addRootType, setAddRootType] = useState<'branch' | 'item' | 'task' | 'protocol'>('branch');
   const [newRootName, setNewRootName] = useState('');
   const [selectedElementTypeId, setSelectedElementTypeId] = useState<string | null>(null);
   const [selectedTaskTypeId, setSelectedTaskTypeId] = useState<string | null>(null);
-  const elementTypes = useAppStore((s) => s.elementTypes);
-  const taskTypes = useAppStore((s) => s.taskTypes);
+
+  // Inline project rename
+  const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [colorPickerProjectId, setColorPickerProjectId] = useState<string | null>(null);
+
+  // Status picker state
+  const [statusPickerProjectId, setStatusPickerProjectId] = useState<string | null>(null);
+
+  const handleProjectColorChange = async (projectId: string, color: string) => {
+    try {
+      await updateProject(projectId, { color });
+      toast({ title: 'Цвет обновлён' });
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err?.message || 'Не удалось обновить цвет', variant: 'destructive' });
+    }
+    setColorPickerProjectId(null);
+  };
+
+  // Listen for create project request from TopBar
+  useEffect(() => {
+    if (pendingCreateProject) {
+      consumeCreateProjectRequest();
+      setCreateDialogOpen(true);
+    }
+  }, [pendingCreateProject, consumeCreateProjectRequest]);
 
   // DnD sensors
   const sensors = useSensors(
@@ -330,7 +345,7 @@ export function ProjectTreeView() {
     }
   }, [nodes, updateNode, loadAllData, toast, findNodeInTree, isDescendantInTree]);
 
-  // Filter and sort projects: by status priority, then alphabetically
+  // Sort projects: by status priority, then alphabetically
   const filteredProjects = useMemo(() => {
     const STATUS_ORDER: Record<string, number> = {
       active: 0,
@@ -338,22 +353,13 @@ export function ProjectTreeView() {
       completed: 2,
       archived: 3,
     };
-    let result = projects;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.description?.toLowerCase().includes(q)
-      );
-    }
-    return [...result].sort((a, b) => {
+    return [...projects].sort((a, b) => {
       const orderA = STATUS_ORDER[a.status] ?? 99;
       const orderB = STATUS_ORDER[b.status] ?? 99;
       if (orderA !== orderB) return orderA - orderB;
       return a.name.localeCompare(b.name, 'ru');
     });
-  }, [projects, searchQuery]);
+  }, [projects]);
 
   // Reload handler for child components
   const handleReload = useCallback(async () => {
@@ -376,94 +382,56 @@ export function ProjectTreeView() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Проекты</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Все проекты в едином дереве
-          </p>
-        </div>
-        <Button onClick={() => setCreateDialogOpen(true)} className="gap-2 shrink-0">
-          <Plus className="h-4 w-4" />
-          Создать проект
-        </Button>
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Поиск проектов..."
-          className="pl-9"
-        />
-      </div>
-
-      <Separator />
-
+    <div>
       {/* Empty state */}
       {filteredProjects.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
             <FolderKanban className="h-8 w-8 text-muted-foreground" />
           </div>
-          <h3 className="text-lg font-semibold mb-1">
-            {searchQuery ? 'Ничего не найдено' : 'Нет проектов'}
-          </h3>
+          <h3 className="text-lg font-semibold mb-1">Нет проектов</h3>
           <p className="text-sm text-muted-foreground mb-4 max-w-xs">
-            {searchQuery
-              ? 'Попробуйте изменить поисковый запрос'
-              : 'Создайте свой первый проект для управления задачами и артефактами'}
+            Создайте свой первый проект для управления задачами и артефактами
           </p>
-          {!searchQuery && (
-            <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
-              <CirclePlus className="h-4 w-4" />
-              Создать проект
-            </Button>
-          )}
+          <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
+            <CirclePlus className="h-4 w-4" />
+            Создать проект
+          </Button>
         </div>
       )}
 
-      {/* Project list with DnD */}
+      {/* Unified tree: projects as rows, children indented inline */}
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col">
           {filteredProjects.map((project) => {
             const isExpanded = expandedProjects.has(project.id);
             const rootNodes = getRootNodes(nodes, project.id);
             const nodeCount = countNodes(rootNodes);
 
             return (
-              <div
-                key={project.id}
-                className="rounded-lg border bg-card"
-              >
-                {/* Project header row */}
+              <div key={project.id} className="group">
+                {/* Project row — compact, no card wrapper */}
                 <div
-                  className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-accent/30 transition-colors rounded-t-lg"
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-accent/50 transition-colors"
                   onClick={() => toggleProject(project.id)}
                 >
                   {/* Chevron */}
-                  <div className="shrink-0">
+                  <div className="shrink-0 w-4">
                     {isExpanded ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                     ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                     )}
                   </div>
 
-                  {/* Color indicator — clickable to change */}
+                  {/* Color indicator (clickable) */}
                   <Popover
                     open={colorPickerProjectId === project.id}
-                    onOpenChange={(open) => {
-                      if (!open) setColorPickerProjectId(null);
-                    }}
+                    onOpenChange={(open) => setColorPickerProjectId(open ? project.id : null)}
                   >
                     <PopoverTrigger asChild>
                       <button
-                        className="h-3 w-3 rounded-full shrink-0 hover:ring-2 hover:ring-foreground/30 transition-all cursor-pointer"
+                        className="h-2.5 w-2.5 rounded-full shrink-0 hover:scale-125 transition-transform cursor-pointer"
                         style={{ backgroundColor: project.color }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -472,12 +440,8 @@ export function ProjectTreeView() {
                         title="Изменить цвет"
                       />
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-3" align="start" side="bottom">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Palette className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span className="text-xs font-medium text-muted-foreground">Цвет проекта</span>
-                      </div>
-                      <div className="grid grid-cols-6 gap-1.5">
+                    <PopoverContent className="w-auto p-2" align="start">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         {PRESET_COLORS.map((color) => (
                           <button
                             key={color}
@@ -487,12 +451,7 @@ export function ProjectTreeView() {
                                 : 'border-transparent hover:border-muted-foreground/50'
                             }`}
                             style={{ backgroundColor: color }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateProject(project.id, { color });
-                              setColorPickerProjectId(null);
-                            }}
-                            aria-label={`Цвет ${color}`}
+                            onClick={() => handleProjectColorChange(project.id, color)}
                           />
                         ))}
                       </div>
@@ -501,29 +460,70 @@ export function ProjectTreeView() {
 
                   {/* Icon */}
                   {isExpanded ? (
-                    <FolderOpen className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
                   ) : (
-                    <FolderKanban className="h-5 w-5 text-muted-foreground shrink-0" />
+                    <FolderKanban className="h-4 w-4 text-muted-foreground shrink-0" />
                   )}
 
-                  {/* Name */}
-                  <span className="font-semibold text-sm flex-1 min-w-0 truncate">
-                    {project.name}
-                  </span>
+                  {/* Name (inline edit) */}
+                  {renamingProjectId === project.id ? (
+                    <Input
+                      autoFocus
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter') {
+                          const trimmed = renameValue.trim();
+                          if (trimmed && trimmed !== project.name) {
+                            try {
+                              await updateProject(project.id, { name: trimmed });
+                              toast({ title: 'Проект переименован' });
+                            } catch (err: any) {
+                              toast({ title: 'Ошибка', description: err?.message || 'Не удалось переименовать', variant: 'destructive' });
+                            }
+                          }
+                          setRenamingProjectId(null);
+                        }
+                        if (e.key === 'Escape') setRenamingProjectId(null);
+                      }}
+                      onBlur={async () => {
+                        const trimmed = renameValue.trim();
+                        if (trimmed && trimmed !== project.name) {
+                          try {
+                            await updateProject(project.id, { name: trimmed });
+                            toast({ title: 'Проект переименован' });
+                          } catch (err: any) {
+                            toast({ title: 'Ошибка', description: err?.message || 'Не удалось переименовать', variant: 'destructive' });
+                          }
+                        }
+                        setRenamingProjectId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-6 text-sm font-semibold"
+                    />
+                  ) : (
+                    <span
+                      className="font-semibold text-sm flex-1 min-w-0 truncate cursor-text select-none"
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setRenamingProjectId(project.id);
+                        setRenameValue(project.name);
+                      }}
+                      title="Двойной клик для переименования"
+                    >
+                      {project.name}
+                    </span>
+                  )}
 
                   {/* Status badge — clickable to change */}
                   <Popover
                     open={statusPickerProjectId === project.id}
-                    onOpenChange={(open) => {
-                      if (!open) setStatusPickerProjectId(null);
-                    }}
+                    onOpenChange={(open) => setStatusPickerProjectId(open ? project.id : null)}
                   >
                     <PopoverTrigger asChild>
                       <button
-                        className={cn(
-                          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-all hover:ring-2 hover:ring-foreground/20 cursor-pointer shrink-0',
-                          PROJECT_STATUS_COLORS[project.status]
-                        )}
+                        className={`${PROJECT_STATUS_COLORS[project.status]} text-[10px] px-1.5 py-0 h-4 rounded-full shrink-0 hover:ring-2 hover:ring-foreground/20 transition-all cursor-pointer`}
                         onClick={(e) => {
                           e.stopPropagation();
                           setStatusPickerProjectId(project.id);
@@ -532,17 +532,16 @@ export function ProjectTreeView() {
                         {PROJECT_STATUS_LABELS[project.status] || project.status}
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-2" align="end" side="bottom">
+                    <PopoverContent className="w-auto p-2" align="end">
                       <div className="flex flex-col gap-0.5">
                         {PROJECT_STATUSES.map((status) => (
                           <button
                             key={status}
-                            className={cn(
-                              'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors text-left',
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors text-left ${
                               project.status === status
                                 ? 'bg-accent font-medium'
                                 : 'hover:bg-accent/50'
-                            )}
+                            }`}
                             onClick={(e) => {
                               e.stopPropagation();
                               updateProject(project.id, { status });
@@ -567,101 +566,101 @@ export function ProjectTreeView() {
 
                   {/* Node count */}
                   {nodeCount > 0 && (
-                    <Badge variant="outline" className="text-xs tabular-nums">
+                    <span className="text-[10px] text-muted-foreground tabular-nums">
                       {nodeCount}
-                    </Badge>
+                    </span>
                   )}
 
-                  {/* Actions */}
+                  {/* Actions — show on hover */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 hover:!opacity-100 transition-opacity">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7"
+                      className="h-6 w-6"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleStartAddRoot(project.id, 'branch');
                       }}
                       title="Добавить ветку"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Plus className="h-3 w-3" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteProjectId(project.id);
                       }}
                       title="Удалить проект"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
 
-                {/* Expanded: node tree */}
+                {/* Expanded: child nodes indented inline */}
                 {isExpanded && (
-                  <div className="border-t px-1 py-1">
+                  <div className="ml-6">
                     {rootNodes.length === 0 && addingToProject !== project.id ? (
-                      <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-                        <p className="flex-1">Нет узлов. Добавьте ветку или элемент.</p>
+                      <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                        <span>Пусто</span>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 text-xs gap-1"
+                          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => handleStartAddRoot(project.id, 'branch')}
                         >
-                          <FolderKanban className="h-3 w-3" />
+                          <FolderKanban className="h-3 w-3 mr-1" />
                           Ветка
                         </Button>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 text-xs gap-1"
+                          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => handleStartAddRoot(project.id, 'item')}
                         >
-                          <FileText className="h-3 w-3" />
+                          <FileText className="h-3 w-3 mr-1" />
                           Элемент
                         </Button>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 text-xs gap-1"
+                          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => handleStartAddRoot(project.id, 'task')}
                         >
-                          <ListTodo className="h-3 w-3" />
+                          <ListTodo className="h-3 w-3 mr-1" />
                           Задача
                         </Button>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          className="h-7 text-xs gap-1"
+                          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => handleStartAddRoot(project.id, 'protocol')}
                         >
-                          <ClipboardList className="h-3 w-3" />
+                          <ClipboardList className="h-3 w-3 mr-1" />
                           Протокол
                         </Button>
                       </div>
                     ) : null}
                     {/* Inline add root node */}
                     {addingToProject === project.id && (
-                      <div className="flex items-center gap-1.5 px-2 py-1">
+                      <div className="flex items-center gap-1.5 px-2 py-0.5">
                         {addRootType === 'task' ? (
-                          <ListTodo className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <ListTodo className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         ) : addRootType === 'protocol' ? (
-                          <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <ClipboardList className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         ) : addRootType === 'branch' ? (
-                          <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <FolderKanban className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         ) : (
-                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         )}
                         {addRootType === 'item' && elementTypes.length > 0 && (
                           <select
                             value={selectedElementTypeId || ''}
                             onChange={(e) => setSelectedElementTypeId(e.target.value || null)}
-                            className="h-7 text-xs rounded-md border bg-background px-1.5 shrink-0 max-w-[120px]"
+                            className="h-6 text-xs rounded-md border bg-background px-1.5 shrink-0 max-w-[120px]"
                           >
                             <option value="">Произвольный</option>
                             {elementTypes.map((et) => (
@@ -673,7 +672,7 @@ export function ProjectTreeView() {
                           <select
                             value={selectedTaskTypeId || ''}
                             onChange={(e) => setSelectedTaskTypeId(e.target.value || null)}
-                            className="h-7 text-xs rounded-md border bg-background px-1.5 shrink-0 max-w-[120px]"
+                            className="h-6 text-xs rounded-md border bg-background px-1.5 shrink-0 max-w-[120px]"
                           >
                             <option value="">Без типа</option>
                             {taskTypes.map((tt) => (
@@ -687,36 +686,36 @@ export function ProjectTreeView() {
                           onChange={(e) => setNewRootName(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') handleSubmitRootNode(project.id);
-                            if (e.key === 'Escape') { setAddingToProject(null); setSelectedElementTypeId(null); }
+                            if (e.key === 'Escape') { setAddingToProject(null); setSelectedElementTypeId(null); setSelectedTaskTypeId(null); }
                           }}
                           placeholder={
                             addRootType === 'protocol' ? 'Название протокола...'
                               : addRootType === 'branch' ? 'Название ветки...'
                               : 'Название элемента...'
                           }
-                          className="h-7 text-sm"
+                          className="h-6 text-sm"
                         />
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 shrink-0"
+                          className="h-6 w-6 shrink-0"
                           onClick={() => handleSubmitRootNode(project.id)}
                           disabled={!newRootName.trim()}
                         >
-                          <CirclePlus className="h-4 w-4" />
+                          <CirclePlus className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => setAddingToProject(null)}
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => { setAddingToProject(null); setSelectedElementTypeId(null); setSelectedTaskTypeId(null); }}
                         >
-                          <X className="h-4 w-4" />
+                          <X className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     )}
                     {rootNodes.length > 0 ? (
-                      <div className="flex flex-col gap-0.5">
+                      <div className="flex flex-col">
                         {rootNodes.map((rootNode) => (
                           <NodeRow
                             key={rootNode.id}
@@ -736,41 +735,41 @@ export function ProjectTreeView() {
                     ) : null}
                     {/* Add root buttons at the bottom of node list */}
                     {rootNodes.length > 0 && addingToProject !== project.id && (
-                      <div className="flex items-center gap-1 px-2 py-0.5">
+                      <div className="flex items-center gap-0.5 px-2 py-0.5">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => handleStartAddRoot(project.id, 'branch')}
                         >
-                          <Plus className="h-3 w-3 mr-1" />
-                          Добавить ветку
+                          <Plus className="h-3 w-3 mr-0.5" />
+                          Ветка
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => handleStartAddRoot(project.id, 'item')}
                         >
-                          <Plus className="h-3 w-3 mr-1" />
-                          Добавить элемент
+                          <Plus className="h-3 w-3 mr-0.5" />
+                          Элемент
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => handleStartAddRoot(project.id, 'task')}
                         >
-                          <Plus className="h-3 w-3 mr-1" />
+                          <Plus className="h-3 w-3 mr-0.5" />
                           Задачу
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+                          className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
                           onClick={() => handleStartAddRoot(project.id, 'protocol')}
                         >
-                          <Plus className="h-3 w-3 mr-1" />
+                          <Plus className="h-3 w-3 mr-0.5" />
                           Протокол
                         </Button>
                       </div>

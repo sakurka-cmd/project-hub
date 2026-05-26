@@ -16,7 +16,6 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -400,17 +399,25 @@ export function NodeRow({
             )}
           </button>
         ) : isTask ? (
-          <span className="shrink-0 w-5 flex items-center justify-center">
-            <Checkbox
-              checked={node.completed}
-              disabled={togglingComplete}
-              onCheckedChange={() => {
-                handleToggleComplete();
-              }}
-              onClick={(e) => e.stopPropagation()}
-              className="h-4 w-4"
-            />
-          </span>
+          <button
+            type="button"
+            disabled={togglingComplete}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleComplete();
+            }}
+            className="shrink-0 h-[18px] w-[18px] rounded border-2 flex items-center justify-center transition-colors"
+            style={{
+              borderColor: node.completed ? 'var(--color-primary)' : 'var(--color-muted-foreground, #999)',
+              backgroundColor: node.completed ? 'var(--color-primary)' : 'transparent',
+            }}
+          >
+            {node.completed && (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+          </button>
         ) : isProtocol ? (
           <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />
         ) : (

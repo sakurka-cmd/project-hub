@@ -66,7 +66,8 @@ function LoadingSkeleton() {
 function TopBar() {
   const isMobile = useIsMobile();
   const { data: session } = useSession();
-  const isAdmin = (session?.user as any)?.role === 'admin';
+  const currentUser = useAppStore((s) => s.currentUser);
+  const isAdmin = currentUser?.role === 'admin';
   const requestCreateProject = useAppStore((s) => s.requestCreateProject);
 
   return (
@@ -108,7 +109,7 @@ function TopBar() {
         onClick={requestCreateProject}
       >
         <Plus className="h-3.5 w-3.5" />
-        Новый проект
+        Добавить проект
       </Button>
 
       {/* Settings link (admin only) */}

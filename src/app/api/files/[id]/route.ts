@@ -5,6 +5,10 @@ import { existsSync } from 'fs';
 import { getCurrentUser } from '@/lib/session';
 import { db } from '@/lib/db';
 
+function getUploadDir(): string {
+  return process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
+}
+
 // GET /api/files/[id] — скачать файл
 export async function GET(
   req: NextRequest,
@@ -18,7 +22,7 @@ export async function GET(
       return NextResponse.json({ error: 'Файл не найден' }, { status: 404 });
     }
 
-    const filePath = join(process.cwd(), 'uploads', attachment.fileName);
+    const filePath = join(getUploadDir(), attachment.fileName);
     if (!existsSync(filePath)) {
       return NextResponse.json({ error: 'Файл на диске не найден' }, { status: 404 });
     }
@@ -56,7 +60,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Файл не найден' }, { status: 404 });
     }
 
-    // Проверяем права доступа через проект
     const node = await db.node.findUnique({ where: { id: attachment.nodeId } });
     if (node) {
       const project = await db.project.findUnique({ where: { id: node.projectId } });
@@ -65,13 +68,11 @@ export async function DELETE(
       }
     }
 
-    // Удаляем с диска
-    const filePath = join(process.cwd(), 'uploads', attachment.fileName);
+    const filePath = join(getUploadDir(), attachment.fileName);
     if (existsSync(filePath)) {
       await unlink(filePath).catch(() => {});
     }
 
-    // Удаляем из БД
     await db.fileAttachment.delete({ where: { id } });
 
     return NextResponse.json({ success: true });

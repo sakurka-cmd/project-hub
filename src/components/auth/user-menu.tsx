@@ -56,14 +56,12 @@ export function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {isAdmin && (
-          <DropdownMenuItem asChild>
-            <Link href="/settings" className="cursor-pointer gap-2">
-              <Settings className="h-4 w-4" />
-              Настройки
-            </Link>
-          </DropdownMenuItem>
-        )}
+        <DropdownMenuItem asChild>
+          <Link href="/settings" className="cursor-pointer gap-2">
+            <Settings className="h-4 w-4" />
+            Настройки
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => signOut({ callbackUrl: '/login' })}

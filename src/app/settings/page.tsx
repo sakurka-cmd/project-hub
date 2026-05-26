@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,15 +23,23 @@ export default function SettingsPage() {
   const taskTypes = useAppStore((s) => s.taskTypes);
   const loadAllData = useAppStore((s) => s.loadAllData);
 
-  const [maxFileSizeMb, setMaxFileSizeMb] = useState('10');
-  const [allowRegistration, setAllowRegistration] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(true);
-
   const isAdmin = currentUser?.role === 'admin';
 
+  // System settings (admin only)
+  const [maxFileSizeMb, setMaxFileSizeMb] = useState('10');
+  const [allowRegistration, setAllowRegistration] = useState(true);
+  const [systemSaving, setSystemSaving] = useState(false);
+  const [systemLoading, setSystemLoading] = useState(true);
+
+  // Password change
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+
   useEffect(() => {
-    // If no current user, try to fetch via API
     if (!currentUser) {
       api.getMe()
         .then((user) => {
@@ -47,14 +55,14 @@ export default function SettingsPage() {
       return;
     }
 
-    if (!isAdmin) return;
-
-    loadSettings();
-    loadAllData();
+    if (isAdmin) {
+      loadSettings();
+      loadAllData();
+    }
   }, [currentUser, isAdmin, router, loadAllData]);
 
   const loadSettings = async () => {
-    setLoading(true);
+    setSystemLoading(true);
     try {
       const settings = await api.getSettings();
       if (settings.max_file_size_mb) setMaxFileSizeMb(settings.max_file_size_mb);
@@ -64,12 +72,12 @@ export default function SettingsPage() {
     } catch {
       // use defaults
     } finally {
-      setLoading(false);
+      setSystemLoading(false);
     }
   };
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleSaveSystem = async () => {
+    setSystemSaving(true);
     try {
       await api.updateSettings({
         max_file_size_mb: maxFileSizeMb,
@@ -79,29 +87,42 @@ export default function SettingsPage() {
     } catch (err: any) {
       toast({ title: 'Ошибка', description: err?.message || 'Не удалось сохранить', variant: 'destructive' });
     } finally {
-      setSaving(false);
+      setSystemSaving(false);
     }
   };
 
-  // Waiting for user data to load
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast({ title: 'Ошибка', description: 'Заполните все поля', variant: 'destructive' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: 'Ошибка', description: 'Новый пароль и подтверждение не совпадают', variant: 'destructive' });
+      return;
+    }
+    if (newPassword.length < 4) {
+      toast({ title: 'Ошибка', description: 'Пароль должен быть не менее 4 символов', variant: 'destructive' });
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      await api.changePassword({ currentPassword, newPassword });
+      toast({ title: 'Пароль изменён' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err?.message || 'Не удалось сменить пароль', variant: 'destructive' });
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   if (!currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold">Доступ запрещён</h1>
-          <p className="text-muted-foreground">Эта страница доступна только администраторам.</p>
-        </div>
-        <Button variant="outline" onClick={() => router.push('/')} className="gap-2">
-          <ArrowLeft className="h-4 w-4" /> На главную
-        </Button>
       </div>
     );
   }
@@ -114,16 +135,91 @@ export default function SettingsPage() {
             <ArrowLeft className="h-4 w-4" />
             <span className="sr-only">Назад</span>
           </Button>
-          <h1 className="font-semibold text-lg">Настройки системы</h1>
+          <h1 className="font-semibold text-lg">
+            {isAdmin ? 'Настройки системы' : 'Настройки'}
+          </h1>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto p-4 md:p-6 space-y-6">
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
+        {/* Password change — available to all users */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Смена пароля</CardTitle>
+            <CardDescription>
+              Аккаунт: <span className="font-medium">{currentUser.username}</span>
+              <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-muted">
+                {currentUser.role === 'admin' ? 'Администратор' : 'Пользователь'}
+              </span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="current-password">Текущий пароль</Label>
+              <div className="relative">
+                <Input
+                  id="current-password"
+                  type={showCurrent ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Введите текущий пароль"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrent(!showCurrent)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-password">Новый пароль</Label>
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  type={showNew ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Минимум 4 символа"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNew(!showNew)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="confirm-password">Подтверждение нового пароля</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Повторите новый пароль"
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button
+                onClick={handleChangePassword}
+                disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}
+                className="gap-2 min-w-[120px]"
+              >
+                {passwordSaving ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Сохранение...</>
+                ) : 'Сменить пароль'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Admin-only settings */}
+        {isAdmin && (
           <>
             <Card>
               <CardHeader>
@@ -131,28 +227,38 @@ export default function SettingsPage() {
                 <CardDescription>Управление глобальными настройками ProjectHub</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="max-file-size">Ограничение размера файлов</Label>
-                  <div className="flex items-center gap-3">
-                    <Input id="max-file-size" type="number" min={1} max={100} value={maxFileSizeMb} onChange={(e) => setMaxFileSizeMb(e.target.value)} className="w-24" />
-                    <span className="text-sm text-muted-foreground">МБ</span>
+                {systemLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                  <p className="text-xs text-muted-foreground">Максимальный размер загружаемого файла</p>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col gap-0.5">
-                    <Label htmlFor="allow-registration">Регистрация новых пользователей</Label>
-                    <p className="text-xs text-muted-foreground">Разрешить создание новых аккаунтов</p>
-                  </div>
-                  <Switch id="allow-registration" checked={allowRegistration} onCheckedChange={setAllowRegistration} />
-                </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="max-file-size">Ограничение размера файлов</Label>
+                      <div className="flex items-center gap-3">
+                        <Input id="max-file-size" type="number" min={1} max={100} value={maxFileSizeMb} onChange={(e) => setMaxFileSizeMb(e.target.value)} className="w-24" />
+                        <span className="text-sm text-muted-foreground">МБ</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Максимальный размер загружаемого файла</p>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="allow-registration">Регистрация новых пользователей</Label>
+                        <p className="text-xs text-muted-foreground">Разрешить создание новых аккаунтов</p>
+                      </div>
+                      <Switch id="allow-registration" checked={allowRegistration} onCheckedChange={setAllowRegistration} />
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
             <div className="flex justify-end">
-              <Button onClick={handleSave} disabled={saving} className="gap-2 min-w-[120px]">
-                {saving ? (<><Loader2 className="h-4 w-4 animate-spin" /> Сохранение...</>) : 'Сохранить'}
+              <Button onClick={handleSaveSystem} disabled={systemSaving || systemLoading} className="gap-2 min-w-[120px]">
+                {systemSaving ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Сохранение...</>
+                ) : 'Сохранить настройки'}
               </Button>
             </div>
 
@@ -181,3 +287,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

@@ -4,39 +4,32 @@
 
 ## Возможности
 
-- **Дерево проектов** — иерархическая структура узлов (ветки, элементы, задачи, протоколы) с неограниченной вложенностью
-- **Протоколы** — создание протоколов с автоподстановкой даты в название, текстовым описанием и таблицей решений (задача, срок, ответственный, комментарий); экспорт в формате для копипаста в Outlook
-- **Динамические поля** — произвольные ключ-значение пары для каждого элемента, без жёсткой схемы
+- **Компактное дерево** — единая древовидная структура проектов и узлов (ветки, элементы, задачи, протоколы) без лишних блоков, с неограниченной вложенностью
+- **Inline-переименование** — двойной клик на названии проекта для быстрого редактирования
+- **Цветовые метки** — 8 предустановленных цветов для визуальной категоризации проектов
+- **Статусы проектов** — active / paused / completed / archived с сортировкой по приоритету
+- **Протоколы** — создание с автоподстановкой даты, текстовое описание, таблица решений; экспорт в формате для Outlook
+- **Динамические поля** — произвольные ключ-значение пары для каждого элемента
 - **Типы веток** — визуальная категоризация: задачи, инфраструктура, учётные данные, артефакты
-- **Типы задач** — предопределённые типы с фиксированным набором полей
-- **Файловые вложения** — загрузка через диалог выбора файлов или drag-and-drop, скачивание и удаление
-- **Дублирование** — глубокое рекурсивное копирование узлов со всеми дочерними элементами
-- **Перетаскивание** — drag-and-drop перемещение элементов между ветками
-- **Экспорт** — выгрузка ветки в HTML-таблицу; экспорт протокола в формате, готовом для вставки в письмо Outlook
-- **Плавающие кнопки действий** — кнопки «Сохранить» и «Экспорт» вверху панели редактирования, «Сохранить» появляется только при наличии изменений
-- **Пользователи** — регистрация, авторизация, изоляция проектов по аккаунтам
-- **Роли** — `admin` (видит все проекты, управляет настройками) и `user` (только свои проекты)
-- **Системные настройки** — ограничение размера файлов, включение/выключение регистрации
+- **Типы задач** — предопределённые типы с цветовой маркировкой
+- **Чекбоксы задач** — работающие на любом уровне вложенности (в корне и внутри веток)
+- **Файловые вложения** — загрузка через диалог или drag-and-drop, скачивание и удаление
+- **Дублирование** — глубокое рекурсивное копирование узлов
+- **Перетаскивание** — drag-and-drop перемещение между ветками
+- **Экспорт** — ветки в HTML-таблицу; протоколов в формат для Outlook
+- **Плавающие кнопки действий** — «Сохранить» (появляется при изменениях) и «Экспорт» вверху панели
+- **Пользователи и роли** — `admin` / `user`, изоляция проектов, первый пользователь = admin
+- **Системные настройки** — лимит файлов, toggle регистрации
 
-## Быстрый старт (Docker)
+## Быстрый старт
 
-```bash
-git clone https://github.com/sakurka-cmd/project-hub.git
-cd project-hub
-
-# Сборка на хосте (требует Node.js 22+ и bun)
-./deploy.sh
-
-# Запуск
-docker compose up -d
-```
-
-### Без Docker (host-build + systemd)
+### Host-build + systemd (рекомендуется)
 
 ```bash
 git clone https://github.com/sakurka-cmd/project-hub.git
 cd project-hub
 
+# Установите зависимости (требуется Node.js 22+ и bun)
 source ~/.nvm/nvm.sh && nvm use 22
 export PATH=$HOME/.bun/bin:$PATH
 
@@ -50,15 +43,52 @@ cp -r prisma .next/standalone/
 cp -r node_modules/.prisma .next/standalone/node_modules/
 cp -r node_modules/prisma .next/standalone/node_modules/
 cp -r node_modules/@prisma .next/standalone/node_modules/
+```
 
-# Инициализация БД
-DATABASE_URL=file:/path/to/data/projecthub.db npx prisma db push
+Создайте systemd-сервис (пример):
+
+```ini
+[Unit]
+Description=ProjectHub
+After=network.target
+
+[Service]
+Type=simple
+User=userv
+WorkingDirectory=/home/userv/project-hub/.next/standalone
+ExecStart=/usr/bin/node server.js
+Environment=NODE_ENV=production
+Environment=DATABASE_URL=file:/home/userv/project-hub/data/projecthub.db
+Environment=NEXTAUTH_SECRET=your-secret-here
+Environment=NEXTAUTH_URL=http://your-host:82
+Environment=UPLOAD_DIR=/home/userv/project-hub/data/uploads
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# Инициализация БД (при первом запуске)
+DATABASE_URL=file:/home/userv/project-hub/data/projecthub.db npx prisma db push
 
 # Запуск
-NODE_ENV=production DATABASE_URL=file:/path/to/data/projecthub.db \
-NEXTAUTH_SECRET=your-secret-here NEXTAUTH_URL=http://your-host \
-UPLOAD_DIR=/path/to/data/uploads \
-node .next/standalone/server.js
+sudo systemctl enable project-hub
+sudo systemctl start project-hub
+```
+
+### Docker
+
+```bash
+git clone https://github.com/sakurka-cmd/project-hub.git
+cd project-hub
+
+# Сборка на хосте
+./deploy.sh
+
+# Запуск
+docker compose up -d
 ```
 
 ## Настройка окружения
@@ -72,6 +102,15 @@ node .next/standalone/server.js
 | `PORT` | Порт сервера | `3000` |
 | `HOSTNAME` | Хост для привязки | `0.0.0.0` |
 | `NODE_ENV` | Окружение | `production` |
+
+Пример `.env`:
+
+```env
+DATABASE_URL=file:/home/user/project-hub/data/projecthub.db
+NEXTAUTH_SECRET=your-random-secret-min-32-chars
+NEXTAUTH_URL=http://your-host:82
+UPLOAD_DIR=/home/user/project-hub/data/uploads
+```
 
 ## Начало работы
 

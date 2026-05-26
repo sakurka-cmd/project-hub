@@ -19,6 +19,38 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { ProjectTreeView } from '@/components/tree/project-tree-view';
 
+function PhLogo({ size = 'default' }: { size?: 'default' | 'small' }) {
+  const isSmall = size === 'small';
+  const squareSize = isSmall ? 'h-7 w-7' : 'h-9 w-9';
+  const textP = isSmall ? 'text-sm' : 'text-base';
+  const textH = isSmall ? 'text-xs' : 'text-sm';
+
+  return (
+    <div
+      className={`${squareSize} rounded-md flex items-center overflow-hidden shrink-0`}
+      style={{ backgroundColor: '#000000' }}
+    >
+      <span
+        className={`${textP} font-black leading-none text-white`}
+        style={{ padding: isSmall ? '2px 1px 2px 3px' : '3px 1px 3px 4px' }}
+      >
+        P
+      </span>
+      <span
+        className={`${textH} font-black leading-none flex items-center justify-center`}
+        style={{
+          backgroundColor: '#f97316',
+          color: '#000000',
+          borderRadius: '0 3px 3px 0',
+          padding: isSmall ? '2px 3px 2px 1px' : '3px 4px 3px 1px',
+        }}
+      >
+        h
+      </span>
+    </div>
+  );
+}
+
 function LoadingSkeleton() {
   return (
     <div className="flex h-screen overflow-hidden">
@@ -53,28 +85,20 @@ function TopBar() {
               <SheetTitle>Навигация</SheetTitle>
             </SheetHeader>
             <div className="flex items-center gap-2 px-4 py-5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Layers className="h-4 w-4" />
-              </div>
+              <PhLogo size="small" />
               <span className="text-lg font-bold tracking-tight">ProjectHub</span>
             </div>
           </SheetContent>
         </Sheet>
       )}
 
-      {/* Logo (mobile only) */}
-      {isMobile && (
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Layers className="h-3.5 w-3.5" />
-          </div>
-          <span className="font-semibold text-sm">ProjectHub</span>
-        </div>
-      )}
+      {/* Mobile uses the same logo above */}
+
+      {/* Logo */}
+      <PhLogo />
 
       {/* Spacer */}
-      {!isMobile && <div className="flex-1" />}
-      {isMobile && <div className="flex-1" />}
+      <div className="flex-1" />
 
       {/* Create project button */}
       <Button

@@ -51,7 +51,7 @@ model Node {
   projectId      String
   parentId       String?
   name           String
-  nodeType       String   @default("item") // branch, item, task
+  nodeType       String   @default("item") // branch, item, task, protocol
   branchType     String?
   elementTypeId  String?
   taskTypeId     String?

@@ -418,8 +418,6 @@ export function NodeRow({
               </svg>
             )}
           </button>
-        ) : isProtocol ? (
-          <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />
         ) : (
           <span className="shrink-0 w-5" />
         )}

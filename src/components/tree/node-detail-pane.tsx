@@ -99,6 +99,10 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
   const [dragOver, setDragOver] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isResizing = useRef(false);
+
+  // Resizable panel width (px)
+  const [panelWidth, setPanelWidth] = useState(600);
 
   const isBranch = node?.nodeType === 'branch';
   const isProtocol = node?.nodeType === 'protocol';
@@ -283,6 +287,34 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
       prev.map((d, i) => (i === index ? { ...d, [field]: value } : d))
     );
   };
+
+  // --- Resize handlers ---
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      const delta = startX - ev.clientX;
+      const newWidth = Math.max(400, Math.min(startWidth + delta, window.innerWidth - 200));
+      setPanelWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      isResizing.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [panelWidth]);
 
   const handleExport = async () => {
     if (!node) return;
@@ -541,7 +573,17 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+      <SheetContent side="right" className="overflow-y-auto p-0!" style={{ width: panelWidth, maxWidth: panelWidth }}>
+        {/* Drag handle for resizing */}
+        <div
+          onMouseDown={handleResizeStart}
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10 flex items-center justify-center group"
+          title="Перетащите для изменения размера"
+        >
+          <div className="w-0.5 h-8 rounded-full bg-border group-hover:bg-primary/60 transition-colors" />
+        </div>
+
+        <div className="pl-4 pr-6 pt-6 pb-2">
         <SheetHeader>
           <SheetTitle>
             {isProtocol ? (
@@ -987,6 +1029,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
               {isProtocol ? 'Протокол' : isTask ? 'Задача' : isBranch ? 'Ветка' : 'Элемент'}
             </Badge>
           </div>
+        </div>
         </div>
       </SheetContent>
     </Sheet>

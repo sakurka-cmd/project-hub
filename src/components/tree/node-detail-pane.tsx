@@ -69,6 +69,11 @@ interface DecisionRow {
   comment: string;
 }
 
+interface ParticipantRow {
+  fullName: string;
+  position: string;
+}
+
 const BRANCH_TYPE_OPTIONS = [
   { value: '__none__', label: 'Без типа' },
   { value: 'tasks', label: 'Задачи' },
@@ -91,6 +96,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
   const [protocolText, setProtocolText] = useState('');
   const [decisions, setDecisions] = useState<DecisionRow[]>([]);
   const [screenshots, setScreenshots] = useState<string[]>([]); // attachment IDs
+  const [participants, setParticipants] = useState<ParticipantRow[]>([]);
   const [pastingScreenshot, setPastingScreenshot] = useState(false);
 
   // File attachments
@@ -130,11 +136,20 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
         } else {
           setDecisions([]);
         }
+        if (Array.isArray(f.participants)) {
+          setParticipants(f.participants.map((p: any) => ({
+            fullName: String(p.fullName || ''),
+            position: String(p.position || ''),
+          })));
+        } else {
+          setParticipants([]);
+        }
         setScreenshots(Array.isArray(f.screenshots) ? f.screenshots.filter((s: unknown) => typeof s === 'string') : []);
         setFields([]);
       } else {
         setProtocolText('');
         setDecisions([]);
+        setParticipants([]);
         setFields(
           Object.entries(node.fields).map(([key, value]) => ({
             key,
@@ -163,6 +178,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     if (isProtocol) {
       current.protocolText = protocolText;
       current.decisions = decisions;
+      current.participants = participants;
       current.screenshots = screenshots;
     } else {
       const fieldMap: Record<string, unknown> = {};
@@ -204,6 +220,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
           fields: {
             protocolText,
             decisions,
+            participants,
             screenshots,
           },
         });
@@ -243,6 +260,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
       if (isProtocol) {
         snap.protocolText = protocolText;
         snap.decisions = decisions;
+        snap.participants = participants;
         snap.screenshots = screenshots;
       } else if (!isTask) {
         const fieldMap: Record<string, unknown> = {};
@@ -316,6 +334,21 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     document.addEventListener('mouseup', onMouseUp);
   }, [panelWidth]);
 
+  // Participant row handlers
+  const handleAddParticipant = () => {
+    setParticipants((prev) => [...prev, { fullName: '', position: '' }]);
+  };
+
+  const handleRemoveParticipant = (index: number) => {
+    setParticipants((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleParticipantChange = (index: number, field: keyof ParticipantRow, value: string) => {
+    setParticipants((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, [field]: value } : p))
+    );
+  };
+
   const handleExport = async () => {
     if (!node) return;
     try {
@@ -363,6 +396,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
           ...currentFields,
           protocolText: typeof currentFields.protocolText === 'string' ? currentFields.protocolText : protocolText,
           decisions: Array.isArray(currentFields.decisions) ? currentFields.decisions : decisions,
+          participants: Array.isArray(currentFields.participants) ? currentFields.participants : participants,
           screenshots: newScreenshots,
         },
       });
@@ -396,6 +430,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
             ...currentFields,
             protocolText: typeof currentFields.protocolText === 'string' ? currentFields.protocolText : protocolText,
             decisions: Array.isArray(currentFields.decisions) ? currentFields.decisions : decisions,
+            participants: Array.isArray(currentFields.participants) ? currentFields.participants : participants,
             screenshots: newScreenshots,
           },
         });
@@ -733,6 +768,79 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
                     <p className="text-sm text-muted-foreground">
                       Вставьте скриншот из буфера обмена (Ctrl+V)
                     </p>
+                  </div>
+                )}
+              </div>
+
+
+              <Separator />
+
+              {/* Participants table */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Участники</Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={handleAddParticipant}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Добавить участника
+                  </Button>
+                </div>
+
+                {participants.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Нет участников. Нажмите «Добавить участника».
+                  </p>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10 text-center">#</TableHead>
+                          <TableHead className="min-w-[200px]">ФИО</TableHead>
+                          <TableHead className="min-w-[180px]">Должность</TableHead>
+                          <TableHead className="w-10"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {participants.map((participant, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="text-center text-muted-foreground text-sm font-mono">
+                              {idx + 1}
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={participant.fullName}
+                                onChange={(e) => handleParticipantChange(idx, 'fullName', e.target.value)}
+                                placeholder="Фамилия Имя Отчество"
+                                className="h-8 text-sm"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={participant.position}
+                                onChange={(e) => handleParticipantChange(idx, 'position', e.target.value)}
+                                placeholder="Должность"
+                                className="h-8 text-sm"
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleRemoveParticipant(idx)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </div>

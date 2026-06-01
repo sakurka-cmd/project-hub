@@ -99,6 +99,9 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
   const [participants, setParticipants] = useState<ParticipantRow[]>([]);
   const [pastingScreenshot, setPastingScreenshot] = useState(false);
 
+  // Task-specific state
+  const [taskDescription, setTaskDescription] = useState('');
+
   // File attachments
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -146,7 +149,10 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
         }
         setScreenshots(Array.isArray(f.screenshots) ? f.screenshots.filter((s: unknown) => typeof s === 'string') : []);
         setFields([]);
-      } else {
+        setTaskDescription('');
+      } else if (node.nodeType === 'task') {
+        const f = node.fields;
+        setTaskDescription(typeof f.taskDescription === 'string' ? f.taskDescription : '');
         setProtocolText('');
         setDecisions([]);
         setParticipants([]);
@@ -180,6 +186,13 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
       current.decisions = decisions;
       current.participants = participants;
       current.screenshots = screenshots;
+    } else if (isTask) {
+      current.taskDescription = taskDescription;
+      const fieldMap: Record<string, unknown> = {};
+      for (const f of fields) {
+        if (f.key.trim()) fieldMap[f.key.trim()] = f.value;
+      }
+      current.fields = fieldMap;
     } else {
       const fieldMap: Record<string, unknown> = {};
       for (const f of fields) {
@@ -226,8 +239,14 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
         });
       } else if (isTask) {
         // Save task data (name + taskTypeId if any, keep completed)
+        const taskFields: Record<string, unknown> = { taskDescription };
+        for (const f of fields) {
+          const k = f.key.trim();
+          if (k && k !== 'taskDescription') taskFields[k] = f.value;
+        }
         await updateNode(node.id, {
           name: trimmedName,
+          fields: taskFields,
         });
       } else {
         // Save branch/item data
@@ -262,7 +281,14 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
         snap.decisions = decisions;
         snap.participants = participants;
         snap.screenshots = screenshots;
-      } else if (!isTask) {
+      } else if (isTask) {
+        const taskFields: Record<string, unknown> = { taskDescription };
+        for (const f of fields) {
+          const k = f.key.trim();
+          if (k && k !== 'taskDescription') taskFields[k] = f.value;
+        }
+        snap.fields = taskFields;
+      } else {
         const fieldMap: Record<string, unknown> = {};
         for (const f of fields) {
           if (f.key.trim()) fieldMap[f.key.trim()] = f.value;
@@ -275,7 +301,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
     } finally {
       setSaving(false);
     }
-  }, [node, name, branchType, fields, isBranch, isProtocol, isTask, protocolText, decisions, screenshots, updateNode, toast]);
+  }, [node, name, branchType, fields, isBranch, isProtocol, isTask, protocolText, decisions, screenshots, participants, taskDescription, updateNode, toast]);
 
   const handleAddField = () => {
     setFields((prev) => [...prev, { key: '', value: '', isNew: true }]);
@@ -715,67 +741,7 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
           {/* ========== PROTOCOL-SPECIFIC SECTION ========== */}
           {isProtocol && (
             <div onPaste={handlePasteScreenshot}>
-              {/* Protocol text */}
-              <div className="flex flex-col gap-1.5">
-                <Label>Текст протокола</Label>
-                <Textarea
-                  value={protocolText}
-                  onChange={(e) => setProtocolText(e.target.value)}
-                  placeholder="Введите текст протокола..."
-                  className="text-sm min-h-[120px] resize-y"
-                  rows={6}
-                />
-              </div>
-
-              {/* Screenshots section */}
-              <div className="flex flex-col gap-2 mt-5">
-                <div className="flex items-center justify-between">
-                  <Label className="text-base font-semibold">Скриншоты</Label>
-                  <span className="text-xs text-muted-foreground">Ctrl+V для вставки</span>
-                </div>
-
-                {pastingScreenshot && (
-                  <div className="flex items-center gap-2 py-2">
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    <span className="text-sm text-muted-foreground">Вставка скриншота...</span>
-                  </div>
-                )}
-
-                {screenshots.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {screenshots.map((attId) => (
-                      <div key={attId} className="relative group rounded-lg border overflow-hidden bg-muted/20">
-                        <img
-                          src={api.getFileUrl(attId)}
-                          alt="Скриншот"
-                          className="w-full h-auto max-h-48 object-contain bg-white"
-                        />
-                        <button
-                          onClick={() => handleRemoveScreenshot(attId)}
-                          className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive"
-                          title="Удалить скриншот"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {screenshots.length === 0 && !pastingScreenshot && (
-                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                    <ImageIcon className="h-6 w-6 mx-auto text-muted-foreground/50 mb-1" />
-                    <p className="text-sm text-muted-foreground">
-                      Вставьте скриншот из буфера обмена (Ctrl+V)
-                    </p>
-                  </div>
-                )}
-              </div>
-
-
-              <Separator />
-
-              {/* Participants table */}
+              {/* Participants section */}
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-base font-semibold">Участники</Label>
@@ -843,6 +809,20 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
                     </Table>
                   </div>
                 )}
+              </div>
+
+              <Separator />
+
+              {/* Protocol text */}
+              <div className="flex flex-col gap-1.5">
+                <Label>Текст</Label>
+                <Textarea
+                  value={protocolText}
+                  onChange={(e) => setProtocolText(e.target.value)}
+                  placeholder="Введите текст протокола..."
+                  className="text-sm min-h-[120px] resize-y"
+                  rows={6}
+                />
               </div>
 
               <Separator />
@@ -936,6 +916,71 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
               </div>
 
               <Separator />
+
+              {/* Screenshots section */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Скриншоты</Label>
+                  <span className="text-xs text-muted-foreground">Ctrl+V для вставки</span>
+                </div>
+
+                {pastingScreenshot && (
+                  <div className="flex items-center gap-2 py-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-sm text-muted-foreground">Вставка скриншота...</span>
+                  </div>
+                )}
+
+                {screenshots.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {screenshots.map((attId) => (
+                      <div key={attId} className="relative group rounded-lg border overflow-hidden bg-muted/20">
+                        <a
+                          href={api.getFileUrl(attId)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block cursor-pointer"
+                          title="Открыть в полном размере"
+                        >
+                          <img
+                            src={api.getFileUrl(attId)}
+                            alt="Скриншот"
+                            className="w-full h-auto max-h-48 object-contain bg-white"
+                          />
+                        </a>
+                        <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <a
+                            href={api.getFileUrl(attId)}
+                            download
+                            className="p-1 rounded bg-black/50 text-white hover:bg-black/70 transition-colors"
+                            title="Скачать"
+                          >
+                            <Download className="h-3 w-3" />
+                          </a>
+                          <button
+                            onClick={() => handleRemoveScreenshot(attId)}
+                            className="p-1 rounded bg-black/50 text-white hover:bg-destructive transition-colors"
+                            title="Удалить скриншот"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {screenshots.length === 0 && !pastingScreenshot && (
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                    <ImageIcon className="h-6 w-6 mx-auto text-muted-foreground/50 mb-1" />
+                    <p className="text-sm text-muted-foreground">
+                      Вставьте скриншот из буфера обмена (Ctrl+V)
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
             </div>
           )}
 
@@ -993,8 +1038,19 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
             </div>
           )}
 
-          {/* Task has no extra fields, just a separator */}
-          {!isProtocol && isTask && null}
+          {/* ========== TASK-SPECIFIC SECTION ========== */}
+          {!isProtocol && isTask && (
+            <div className="flex flex-col gap-1.5">
+              <Label>Описание</Label>
+              <Textarea
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                placeholder="Введите описание задачи..."
+                className="text-sm min-h-[120px] resize-y"
+                rows={6}
+              />
+            </div>
+          )}
 
           <Separator />
 

@@ -156,6 +156,20 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
         setProtocolText('');
         setDecisions([]);
         setParticipants([]);
+        setScreenshots([]);
+        setFields(
+          Object.entries(node.fields).map(([key, value]) => ({
+            key,
+            value: String(value ?? ''),
+          }))
+        );
+      } else {
+        // For items (elements) — populate generic fields from node.fields
+        setTaskDescription('');
+        setProtocolText('');
+        setDecisions([]);
+        setParticipants([]);
+        setScreenshots([]);
         setFields(
           Object.entries(node.fields).map(([key, value]) => ({
             key,

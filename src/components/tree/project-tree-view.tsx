@@ -366,6 +366,15 @@ export function ProjectTreeView() {
     await loadAllData();
   }, [loadAllData]);
 
+  // Sync selectedNode with fresh tree data after loadAllData
+  useEffect(() => {
+    if (!selectedNode || nodes.length === 0) return;
+    const fresh = findNodeInTree(selectedNode.id, nodes);
+    if (fresh) {
+      setSelectedNode(fresh);
+    }
+  }, [nodes, selectedNode, findNodeInTree]);
+
   // Loading state
   if (loading && projects.length === 0) {
     return (

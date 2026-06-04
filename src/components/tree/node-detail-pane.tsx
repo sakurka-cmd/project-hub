@@ -120,76 +120,129 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
   // Snapshot of original values to track unsaved changes
   const initialSnapshot = useRef<string | null>(null);
 
-  // Sync local state when node changes & take snapshot for dirty detection
-  useEffect(() => {
-    if (node) {
-      setName(node.name);
-      setBranchType(node.branchType || '__none__');
+  // Cache unsaved state per node ID so switching between nodes preserves edits
+  const unsavedCache = useRef<Record<string, {
+    name: string;
+    branchType: string;
+    fields: FieldEntry[];
+    protocolText: string;
+    decisions: DecisionRow[];
+    screenshots: string[];
+    participants: ParticipantRow[];
+    taskDescription: string;
+  }>>({});
+  const prevNodeIdRef = useRef<string | null>(null);
 
-      if (node.nodeType === 'protocol') {
-        const f = node.fields;
-        setProtocolText(typeof f.protocolText === 'string' ? f.protocolText : '');
-        if (Array.isArray(f.decisions)) {
-          setDecisions(f.decisions.map((d: any) => ({
-            task: String(d.task || ''),
-            deadline: String(d.deadline || ''),
-            responsible: String(d.responsible || ''),
-            comment: String(d.comment || ''),
-          })));
-        } else {
-          setDecisions([]);
-        }
-        if (Array.isArray(f.participants)) {
-          setParticipants(f.participants.map((p: any) => ({
-            fullName: String(p.fullName || ''),
-            position: String(p.position || ''),
-          })));
-        } else {
-          setParticipants([]);
-        }
-        setScreenshots(Array.isArray(f.screenshots) ? f.screenshots.filter((s: unknown) => typeof s === 'string') : []);
-        setFields([]);
-        setTaskDescription('');
-      } else if (node.nodeType === 'task') {
-        const f = node.fields;
-        setTaskDescription(typeof f.taskDescription === 'string' ? f.taskDescription : '');
-        setProtocolText('');
-        setDecisions([]);
-        setParticipants([]);
-        setScreenshots([]);
-        setFields(
-          Object.entries(node.fields).map(([key, value]) => ({
-            key,
-            value: String(value ?? ''),
-          }))
-        );
-      } else {
-        // For items (elements) — populate generic fields from node.fields
-        setTaskDescription('');
-        setProtocolText('');
-        setDecisions([]);
-        setParticipants([]);
-        setScreenshots([]);
-        setFields(
-          Object.entries(node.fields).map(([key, value]) => ({
-            key,
-            value: String(value ?? ''),
-          }))
-        );
+  // Sync local state when node changes & take snapshot for dirty detection
+  // Caches unsaved state per node so switching between nodes doesn't lose data
+  useEffect(() => {
+    const prevId = prevNodeIdRef.current;
+
+    if (node) {
+      // Cache previous node's current state before switching
+      if (prevId && prevId !== node.id) {
+        unsavedCache.current[prevId] = {
+          name, branchType, fields, protocolText, decisions, screenshots, participants, taskDescription
+        };
       }
-      // Store snapshot for dirty detection
-      initialSnapshot.current = JSON.stringify({
-        name: node.name,
-        branchType: node.branchType || '__none__',
-        fields: node.fields,
-      });
+
+      // Check if we have cached unsaved state for this node
+      const cached = unsavedCache.current[node.id];
+      if (cached) {
+        // Restore from cache
+        setName(cached.name);
+        setBranchType(cached.branchType);
+        setFields(cached.fields);
+        setProtocolText(cached.protocolText);
+        setDecisions(cached.decisions);
+        setScreenshots(cached.screenshots);
+        setParticipants(cached.participants);
+        setTaskDescription(cached.taskDescription);
+        // Snapshot stays as original DB values so hasChanges reflects cached vs DB
+        initialSnapshot.current = JSON.stringify({
+          name: node.name,
+          branchType: node.branchType || '__none__',
+          fields: node.fields,
+        });
+      } else {
+        // Load fresh from node.fields
+        setName(node.name);
+        setBranchType(node.branchType || '__none__');
+
+        if (node.nodeType === 'protocol') {
+          const f = node.fields;
+          setProtocolText(typeof f.protocolText === 'string' ? f.protocolText : '');
+          if (Array.isArray(f.decisions)) {
+            setDecisions(f.decisions.map((d: any) => ({
+              task: String(d.task || ''),
+              deadline: String(d.deadline || ''),
+              responsible: String(d.responsible || ''),
+              comment: String(d.comment || ''),
+            })));
+          } else {
+            setDecisions([]);
+          }
+          if (Array.isArray(f.participants)) {
+            setParticipants(f.participants.map((p: any) => ({
+              fullName: String(p.fullName || ''),
+              position: String(p.position || ''),
+            })));
+          } else {
+            setParticipants([]);
+          }
+          setScreenshots(Array.isArray(f.screenshots) ? f.screenshots.filter((s: unknown) => typeof s === 'string') : []);
+          setFields([]);
+          setTaskDescription('');
+        } else if (node.nodeType === 'task') {
+          const f = node.fields;
+          setTaskDescription(typeof f.taskDescription === 'string' ? f.taskDescription : '');
+          setProtocolText('');
+          setDecisions([]);
+          setParticipants([]);
+          setScreenshots([]);
+          setFields(
+            Object.entries(node.fields).map(([key, value]) => ({
+              key,
+              value: String(value ?? ''),
+            }))
+          );
+        } else {
+          // For items (elements) — populate generic fields from node.fields
+          setTaskDescription('');
+          setProtocolText('');
+          setDecisions([]);
+          setParticipants([]);
+          setScreenshots([]);
+          setFields(
+            Object.entries(node.fields).map(([key, value]) => ({
+              key,
+              value: String(value ?? ''),
+            }))
+          );
+        }
+        // Store snapshot for dirty detection
+        initialSnapshot.current = JSON.stringify({
+          name: node.name,
+          branchType: node.branchType || '__none__',
+          fields: node.fields,
+        });
+      }
       // Load attachments
       loadAttachments(node.id);
     } else {
+      // Cache last node's state before closing
+      if (prevId) {
+        unsavedCache.current[prevId] = {
+          name, branchType, fields, protocolText, decisions, screenshots, participants, taskDescription
+        };
+      }
+      prevNodeIdRef.current = null;
       setAttachments([]);
       initialSnapshot.current = null;
     }
-  }, [node]);
+
+    prevNodeIdRef.current = node?.id ?? null;
+  }, [node]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect unsaved changes
   const hasChanges = (() => {
@@ -288,6 +341,8 @@ export function NodeDetailPane({ node, open, onClose }: NodeDetailPaneProps) {
         });
       }
       toast({ title: 'Сохранено' });
+      // Clear cache for this node since it's now saved to DB
+      delete unsavedCache.current[node.id];
       // Update snapshot so hasChanges becomes false after save
       const snap: Record<string, unknown> = { name: trimmedName, branchType: isBranch ? (branchType === '__none__' ? '__none__' : branchType) : '__none__' };
       if (isProtocol) {

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор ТКД облигации</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 32px;
+            width: 100%;
+            max-width: 450px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .header svg {
+            width: 28px;
+            height: 28px;
+            color: #2563eb;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .subtitle {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        input[type="number"]::placeholder {
+            color: #9ca3af;
+        }
+
+        .result-section {
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .result-label {
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .result-value {
+            text-align: center;
+            font-size: 42px;
+            font-weight: 700;
+            color: #2563eb;
+        }
+
+        .formula-box {
+            margin-top: 20px;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+
+        .formula-title {
+            font-size: 13px;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+
+        .formula {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #374151;
+            line-height: 1.6;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="16" height="16" x="4" y="4" rx="2"/>
+                <line x1="8" x2="16" y1="8" y2="8"/>
+                <line x1="8" x2="16" y1="12" y2="12"/>
+                <line x1="8" x2="10" y1="16" y2="16"/>
+            </svg>
+            <h1>Калькулятор ТКД облигации</h1>
+        </div>
+        <p class="subtitle">Расчет текущей доходности по полной цене</p>
+
+        <div class="form-group">
+            <label for="price">Цена облигации (в %)</label>
+            <input 
+                type="number" 
+                id="price" 
+                placeholder="Например: 95.5" 
+                step="0.01"
+                min="0"
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="nkd">НКД (накопленный купонный доход)</label>
+            <input 
+                type="number" 
+                id="nkd" 
+                placeholder="Например: 3.25" 
+                step="0.01"
+                min="0"
+            >
+        </div>
+
+        <div class="form-group">
+            <label for="coupon">Годовой купон</label>
+            <input 
+                type="number" 
+                id="coupon" 
+                placeholder="Например: 8.5" 
+                step="0.01"
+                min="0"
+            >
+        </div>
+
+        <div id="resultSection" class="result-section hidden">
+            <p class="result-label">Текущая доходность (ТКД)</p>
+            <p class="result-value" id="resultValue">0.00%</p>
+            
+            <div class="formula-box">
+                <p class="formula-title">Формула:</p>
+                <p class="formula" id="formulaText">ТКД = (Цена + НКД) / Годовой купон × 100%</p>
+                <p class="formula" id="calculationText"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const priceInput = document.getElementById('price');
+        const nkdInput = document.getElementById('nkd');
+        const couponInput = document.getElementById('coupon');
+        const resultSection = document.getElementById('resultSection');
+        const resultValue = document.getElementById('resultValue');
+        const calculationText = document.getElementById('calculationText');
+
+        function calculate() {
+            const price = parseFloat(priceInput.value.replace(',', '.'));
+            const nkd = parseFloat(nkdInput.value.replace(',', '.'));
+            const coupon = parseFloat(couponInput.value.replace(',', '.'));
+
+            if (!isNaN(price) && !isNaN(nkd) && !isNaN(coupon) && coupon !== 0) {
+                // Формула: Current Yield = (Цена + НКД) / Годовой купон × 100%
+                const yieldValue = ((price + nkd) / coupon) * 100;
+                
+                resultValue.textContent = yieldValue.toFixed(2) + '%';
+                calculationText.textContent = `ТКД = (${price} + ${nkd}) / ${coupon} × 100% = ${yieldValue.toFixed(2)}%`;
+                resultSection.classList.remove('hidden');
+            } else {
+                resultSection.classList.add('hidden');
+            }
+        }
+
+        priceInput.addEventListener('input', calculate);
+        nkdInput.addEventListener('input', calculate);
+        couponInput.addEventListener('input', calculate);
+    </script>
+</body>
+</html>

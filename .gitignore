@@ -63,3 +63,7 @@ examples/
 telegram-bot.ts
 data/uploads/
 /uploads/
+
+# smoke test db
+data/smoke.db
+data/uploads-smoke/

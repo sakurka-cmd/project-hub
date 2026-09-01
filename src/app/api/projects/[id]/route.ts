@@ -17,7 +17,10 @@ export async function GET(
   try {
     const project = await db.project.findUnique({
       where: { id },
-      include: { _count: { select: { nodes: true } } },
+      include: {
+        _count: { select: { nodes: true } },
+        portfolio: true,
+      },
     });
 
     if (!project) {
@@ -50,7 +53,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    const { name, description, status, color } = body;
+    const { name, description, status, color, portfolioId } = body;
 
     const project = await db.project.update({
       where: { id },
@@ -59,6 +62,9 @@ export async function PUT(
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(status !== undefined && { status }),
         ...(color !== undefined && { color }),
+        ...(portfolioId !== undefined && {
+          portfolioId: portfolioId === null || portfolioId === '' ? null : portfolioId,
+        }),
       },
     });
 

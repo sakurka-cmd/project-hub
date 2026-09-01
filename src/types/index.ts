@@ -7,6 +7,16 @@ export interface User {
   updatedAt: string;
 }
 
+// ==================== ПОРТФЕЛИ ====================
+export interface Portfolio {
+  id: string;
+  name: string;
+  description: string | null;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ==================== ПРОЕКТЫ ====================
 export interface Project {
   id: string;
@@ -15,10 +25,12 @@ export interface Project {
   status: 'active' | 'paused' | 'completed' | 'archived';
   color: string;
   userId: string | null;
+  portfolioId: string | null;
   createdAt: string;
   updatedAt: string;
   _count?: { nodes: number };
   nodeCount?: number;
+  portfolio?: Portfolio | null;
 }
 
 // ==================== УЗЛЫ ДЕРЕВА ====================
@@ -56,6 +68,12 @@ export interface SystemSetting {
   value: string;
 }
 
+export interface AgentTokenInfo {
+  configured: boolean;
+  token: string | null;
+  source: 'setting' | 'env' | 'none';
+}
+
 // ==================== ТИПЫ ЭЛЕМЕНТОВ ====================
 export interface ElementTypeField {
   key: string;
@@ -89,6 +107,22 @@ export interface AllDataResponse {
   elementTypes: ElementType[];
   taskTypes: TaskType[];
   attachments: FileAttachment[];
+  portfolios: Portfolio[];
+}
+
+// ==================== AGENT API ====================
+export interface AgentTask {
+  id: string;
+  name: string;
+  description: string;
+  completed: boolean;
+  projectId: string;
+  projectName: string;
+  taskTypeId: string | null;
+  path: string[];
+  fields: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ==================== ПОИСК / НАВИГАЦИЯ ====================

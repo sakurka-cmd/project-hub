@@ -1,4 +1,4 @@
-import type { Project, ProjectNode, ElementType, TaskType, AllDataResponse, FileAttachment } from '@/types';
+import type { Project, ProjectNode, ElementType, TaskType, AllDataResponse, FileAttachment, Portfolio, AgentTokenInfo } from '@/types';
 
 const BASE = '/api';
 
@@ -58,6 +58,20 @@ export const api = {
     fetch(`${BASE}/files/${id}`, { method: 'DELETE' }).then((r) => r.json()),
 
   getFileUrl: (id: string) => `/api/files/${id}`,
+
+  // ==================== PORTFOLIOS ====================
+  getPortfolios: () => fetchJSON<Array<Portfolio & { projectCount?: number }>>(`${BASE}/portfolios`),
+  createPortfolio: (data: { name: string; description?: string | null; order?: number }) =>
+    fetchJSON<Portfolio>(`${BASE}/portfolios`, { method: 'POST', body: JSON.stringify(data) }),
+  updatePortfolio: (id: string, data: { name?: string; description?: string | null; order?: number }) =>
+    fetchJSON<Portfolio>(`${BASE}/portfolios/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deletePortfolio: (id: string) =>
+    fetch(`${BASE}/portfolios/${id}`, { method: 'DELETE' }).then((r) => r.json()),
+
+  // ==================== AGENT API TOKEN (admin) ====================
+  getAgentToken: () => fetchJSON<AgentTokenInfo>(`${BASE}/agent-token`),
+  regenerateAgentToken: () =>
+    fetchJSON<AgentTokenInfo>(`${BASE}/agent-token`, { method: 'POST' }),
 
   // ==================== NODES: DUPLICATE ====================
   duplicateNode: (id: string) =>

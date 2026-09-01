@@ -11,7 +11,7 @@ export async function GET() {
   try {
     const projects = await db.project.findMany({
       where: user.role === 'admin' ? {} : { userId: user.id },
-      include: { _count: { select: { nodes: true } } },
+      include: { _count: { select: { nodes: true } }, portfolio: true },
       orderBy: { updatedAt: 'desc' },
     });
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, description, color } = body;
+    const { name, description, color, portfolioId } = body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 });
@@ -48,6 +48,9 @@ export async function POST(request: NextRequest) {
         description: description?.trim() || null,
         color: color || '#6366f1',
         userId: user.id,
+        ...(typeof portfolioId === 'string' && portfolioId !== '' && {
+          portfolioId,
+        }),
       },
     });
 

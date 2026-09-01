@@ -14,6 +14,7 @@ import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
 import { ElementTypesManager } from '@/components/settings/element-types-manager';
 import { TaskTypesManager } from '@/components/settings/task-types-manager';
+import { AgentApiManager } from '@/components/settings/agent-api-manager';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -279,6 +280,19 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <TaskTypesManager taskTypes={taskTypes} onTypesChanged={loadAllData} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>API для агентов</CardTitle>
+                <CardDescription>
+                  HTTP-интерфейс для автоматизации: агенты читают проекты и задачи, заполняют описания,
+                  закрывают задачи, добавляют документацию и файлы
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AgentApiManager />
               </CardContent>
             </Card>
           </>

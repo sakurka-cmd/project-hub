@@ -28,6 +28,19 @@ model SystemSetting {
   value String
 }
 
+// ==================== ПОРТФЕЛИ (ГРУППИРОВКА ПРОЕКТОВ) ====================
+
+model Portfolio {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  projects Project[]
+}
+
 // ==================== ПРОЕКТЫ ====================
 
 model Project {
@@ -39,9 +52,11 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  userId String?
-  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  nodes  Node[]
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodes       Node[]
+  portfolioId String?
+  portfolio   Portfolio?  @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
 }
 
 // ==================== УЗЛЫ ДЕРЕВА ====================

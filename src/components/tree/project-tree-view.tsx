@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import type { Project, ProjectNode } from '@/types';
+import type { Project, ProjectNode, Portfolio } from '@/types';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
@@ -9,6 +9,7 @@ import {
   normQuery,
   filterTree,
   projectMatches,
+  matchesAny,
 } from '@/lib/search';
 import { HighlightText } from '@/components/search/highlight-text';
 import {
@@ -62,6 +63,9 @@ import {
   ClipboardList,
   Search,
   SearchX,
+  Briefcase,
+  FolderInput,
+  Check,
 } from 'lucide-react';
 
 // Данные проекта после применения фильтра
@@ -76,6 +80,11 @@ interface ProjectViewData {
   /** Совпал сам проект — показываем целиком */
   selfMatched: boolean;
 }
+
+// Группы верхнего уровня в дереве: портфель или проекты без портфеля
+type TreeGroup =
+  | { type: 'portfolio'; key: string; portfolio: Portfolio; views: ProjectViewData[] }
+  | { type: 'loose'; key: string; views: ProjectViewData[]; showHeader: boolean };
 
 // Count all nodes recursively
 function countNodes(nodes: ProjectNode[]): number {
@@ -112,6 +121,11 @@ export function ProjectTreeView() {
   const createNode = useAppStore((s) => s.createNode);
   const updateNode = useAppStore((s) => s.updateNode);
   const updateProject = useAppStore((s) => s.updateProject);
+  const portfolios = useAppStore((s) => s.portfolios);
+  const createPortfolio = useAppStore((s) => s.createPortfolio);
+  const updatePortfolio = useAppStore((s) => s.updatePortfolio);
+  const deletePortfolio = useAppStore((s) => s.deletePortfolio);
+  const moveProjectToPortfolio = useAppStore((s) => s.moveProjectToPortfolio);
   const loadAllData = useAppStore((s) => s.loadAllData);
   const selectProject = useAppStore((s) => s.selectProject);
   const pendingNavigation = useAppStore((s) => s.pendingNavigation);
@@ -159,6 +173,21 @@ export function ProjectTreeView() {
   // Status picker state
   const [statusPickerProjectId, setStatusPickerProjectId] = useState<string | null>(null);
 
+  // Портфели: создание / переименование / удаление / перенос проектов
+  const [portfolioDialogOpen, setPortfolioDialogOpen] = useState(false);
+  const [newPortfolioName, setNewPortfolioName] = useState('');
+  const [newPortfolioDescription, setNewPortfolioDescription] = useState('');
+  const [creatingPortfolio, setCreatingPortfolio] = useState(false);
+  const [renamingPortfolioId, setRenamingPortfolioId] = useState<string | null>(null);
+  const [renamePortfolioValue, setRenamePortfolioValue] = useState('');
+  const [deletePortfolioId, setDeletePortfolioId] = useState<string | null>(null);
+  const portfolioToDelete = portfolios.find((p) => p.id === deletePortfolioId);
+  const [collapsedPortfolios, setCollapsedPortfolios] = useState<Set<string>>(new Set());
+  const [moveProjectId, setMoveProjectId] = useState<string | null>(null);
+
+  // Портфель, выбранный в диалоге создания проекта ('' — без портфеля)
+  const [newPortfolioId, setNewPortfolioId] = useState('');
+
   const handleProjectColorChange = async (projectId: string, color: string) => {
     try {
       await updateProject(projectId, { color });
@@ -169,10 +198,75 @@ export function ProjectTreeView() {
     setColorPickerProjectId(null);
   };
 
+  // ===== Портфели: обработчики =====
+  const togglePortfolioCollapsed = (id: string) => {
+    setCollapsedPortfolios((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleCreatePortfolio = async () => {
+    const name = newPortfolioName.trim();
+    if (!name) {
+      toast({ title: 'Ошибка', description: 'Введите название портфеля', variant: 'destructive' });
+      return;
+    }
+    setCreatingPortfolio(true);
+    try {
+      await createPortfolio({ name, description: newPortfolioDescription.trim() || null });
+      setNewPortfolioName('');
+      setNewPortfolioDescription('');
+      setPortfolioDialogOpen(false);
+      toast({ title: 'Портфель создан' });
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err?.message || 'Не удалось создать портфель', variant: 'destructive' });
+    } finally {
+      setCreatingPortfolio(false);
+    }
+  };
+
+  const commitRenamePortfolio = async (portfolio: Portfolio) => {
+    const trimmed = renamePortfolioValue.trim();
+    if (trimmed && trimmed !== portfolio.name) {
+      try {
+        await updatePortfolio(portfolio.id, { name: trimmed });
+        toast({ title: 'Портфель переименован' });
+      } catch (err: any) {
+        toast({ title: 'Ошибка', description: err?.message || 'Не удалось переименовать', variant: 'destructive' });
+      }
+    }
+    setRenamingPortfolioId(null);
+  };
+
+  const handleConfirmDeletePortfolio = async () => {
+    if (!deletePortfolioId) return;
+    try {
+      await deletePortfolio(deletePortfolioId);
+      toast({ title: 'Портфель удалён', description: 'Проекты остались, но без группировки' });
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err?.message || 'Не удалось удалить портфель', variant: 'destructive' });
+    }
+    setDeletePortfolioId(null);
+  };
+
+  const handleMoveProject = async (projectId: string, portfolioId: string | null) => {
+    try {
+      await moveProjectToPortfolio(projectId, portfolioId);
+      setMoveProjectId(null);
+      toast({ title: portfolioId ? 'Проект перемещён в портфель' : 'Проект убран из портфеля' });
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err?.message || 'Не удалось переместить проект', variant: 'destructive' });
+    }
+  };
+
   // Listen for create project request from TopBar
   useEffect(() => {
     if (pendingCreateProject) {
       consumeCreateProjectRequest();
+      setNewPortfolioId('');
       setCreateDialogOpen(true);
     }
   }, [pendingCreateProject, consumeCreateProjectRequest]);
@@ -236,10 +330,12 @@ export function ProjectTreeView() {
         description: newDescription.trim() || null,
         color: newColor,
         status: 'active',
+        portfolioId: newPortfolioId || null,
       });
       setNewName('');
       setNewDescription('');
       setNewColor(PRESET_COLORS[0]);
+      setNewPortfolioId('');
       setCreateDialogOpen(false);
       toast({ title: 'Проект создан' });
     } catch {
@@ -449,6 +545,75 @@ export function ProjectTreeView() {
     return merged;
   }, [filterActive, expandedNodes, projectViews]);
 
+  // ===== Группы верхнего уровня: портфели + проекты без портфеля =====
+  const treeGroups = useMemo<TreeGroup[]>(() => {
+    const viewById = new Map(projectViews.map((v) => [v.project.id, v]));
+
+    // Проекты в порядке статуса → алфавита
+    const ordered = filteredProjects
+      .map((p) => viewById.get(p.id))
+      .filter((v): v is ProjectViewData => !!v);
+
+    if (portfolios.length === 0) {
+      return [{ type: 'loose', key: '__loose', views: ordered, showHeader: false }];
+    }
+
+    const sortedPortfolios = [...portfolios].sort(
+      (a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ru'),
+    );
+    const portfolioIds = new Set(sortedPortfolios.map((pf) => pf.id));
+
+    const byPortfolio = new Map<string, ProjectViewData[]>();
+    const loose: ProjectViewData[] = [];
+    for (const v of ordered) {
+      const pid = v.project.portfolioId;
+      if (pid && portfolioIds.has(pid)) {
+        const list = byPortfolio.get(pid) || [];
+        list.push(v);
+        byPortfolio.set(pid, list);
+      } else {
+        loose.push(v);
+      }
+    }
+
+    // Совпадение по имени портфеля → показываем все его проекты целиком
+    if (filterActive) {
+      for (const pf of sortedPortfolios) {
+        if (!matchesAny(filterQuery, pf.name)) continue;
+        const all = filteredProjects
+          .filter((p) => p.portfolioId === pf.id)
+          .map((p) => ({
+            project: p,
+            roots: getRootNodes(nodes, p.id),
+            forcedExpand: new Set<string>(),
+            matchCount: 0,
+            selfMatched: true,
+          }));
+        byPortfolio.set(pf.id, all);
+      }
+    }
+
+    const out: TreeGroup[] = sortedPortfolios.map((pf) => ({
+      type: 'portfolio',
+      key: pf.id,
+      portfolio: pf,
+      views: byPortfolio.get(pf.id) || [],
+    }));
+
+    out.push({
+      type: 'loose',
+      key: '__loose',
+      views: loose,
+      showHeader: loose.length > 0,
+    });
+
+    // Под фильтром скрываем пустые группы
+    if (filterActive) {
+      return out.filter((g) => g.views.length > 0);
+    }
+    return out;
+  }, [portfolios, filteredProjects, projectViews, nodes, filterActive, filterQuery]);
+
   // Reload handler for child components
   const handleReload = useCallback(async () => {
     await loadAllData();
@@ -507,114 +672,16 @@ export function ProjectTreeView() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Loading state
-  if (loading && projects.length === 0) {
+  // ===== Рендер одного проекта (строка + раскрытое поддерево) =====
+  const renderProjectView = (view: ProjectViewData) => {
+    const { project, roots, matchCount, selfMatched } = view;
+    const isExpanded = filterActive ? true : expandedProjects.has(project.id);
+    const rootNodes = roots;
+    const nodeCount = countNodes(rootNodes);
+    const displayCount = filterActive ? (selfMatched ? nodeCount : matchCount) : nodeCount;
+
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-4 w-64" />
-        <div className="space-y-3 mt-6">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-lg" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {/* Фильтр дерева */}
-      <div className="flex items-center gap-2 mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            ref={filterInputRef}
-            value={filterRaw}
-            onChange={(e) => setFilterRaw(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                if (filterRaw) {
-                  setFilterRaw('');
-                } else {
-                  filterInputRef.current?.blur();
-                }
-              }
-            }}
-            placeholder="Фильтр по дереву…"
-            className="h-9 pl-8 pr-8"
-            aria-label="Фильтр по дереву"
-          />
-          {filterRaw && (
-            <button
-              type="button"
-              onClick={() => {
-                setFilterRaw('');
-                filterInputRef.current?.focus();
-              }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Очистить фильтр"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        {filterActive && (
-          <span className="text-xs text-muted-foreground shrink-0">
-            {totalFilterMatches > 0 ? (
-              <>найдено: <b className="text-foreground tabular-nums">{totalFilterMatches}</b></>
-            ) : (
-              'совпадений нет'
-            )}
-          </span>
-        )}
-      </div>
-
-      {/* Empty state: нет проектов */}
-      {projects.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
-            <FolderKanban className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold mb-1">Нет проектов</h3>
-          <p className="text-sm text-muted-foreground mb-4 max-w-xs">
-            Создайте свой первый проект для управления задачами и артефактами
-          </p>
-          <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
-            <CirclePlus className="h-4 w-4" />
-            Создать проект
-          </Button>
-        </div>
-      )}
-
-      {/* Empty state: фильтр ничего не нашёл */}
-      {filterActive && projects.length > 0 && projectViews.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
-            <SearchX className="h-8 w-8 text-muted-foreground" />
-          </div>
-          <h3 className="text-lg font-semibold mb-1">Ничего не найдено</h3>
-          <p className="text-sm text-muted-foreground mb-4 max-w-xs">
-            По фильтру «{filterRaw.trim()}» нет совпадений в названиях проектов и узлов
-          </p>
-          <Button variant="outline" onClick={() => setFilterRaw('')} className="gap-2">
-            <X className="h-4 w-4" />
-            Сбросить фильтр
-          </Button>
-        </div>
-      )}
-
-      {/* Unified tree: projects as rows, children indented inline */}
-      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <div className="flex flex-col">
-          {projectViews.map(({ project, roots, matchCount, selfMatched }) => {
-            const isExpanded = filterActive ? true : expandedProjects.has(project.id);
-            const rootNodes = roots;
-            const nodeCount = countNodes(rootNodes);
-            const displayCount = filterActive ? (selfMatched ? nodeCount : matchCount) : nodeCount;
-
-            return (
-              <div key={project.id} className="group">
+      <div key={project.id} className="group">
                 {/* Project row — compact, no card wrapper */}
                 <div
                   id={`project-row-${project.id}`}
@@ -794,6 +861,72 @@ export function ProjectTreeView() {
                     >
                       <Plus className="h-3 w-3" />
                     </Button>
+
+                    {/* Move to portfolio */}
+                    <Popover
+                      open={moveProjectId === project.id}
+                      onOpenChange={(open) => setMoveProjectId(open ? project.id : null)}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Переместить в портфель"
+                        >
+                          <FolderInput className="h-3 w-3" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-56 p-1" align="end">
+                        <div className="flex flex-col">
+                          {portfolios.length === 0 && (
+                            <span className="px-2 py-1.5 text-xs text-muted-foreground">
+                              Сначала создайте портфель
+                            </span>
+                          )}
+                          {portfolios.map((pf) => (
+                            <button
+                              key={pf.id}
+                              className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-left transition-colors ${
+                                project.portfolioId === pf.id ? 'bg-accent font-medium' : 'hover:bg-accent/50'
+                              }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveProject(project.id, pf.id);
+                              }}
+                            >
+                              <Briefcase className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              <span className="flex-1 min-w-0 truncate">{pf.name}</span>
+                              {project.portfolioId === pf.id && (
+                                <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                              )}
+                            </button>
+                          ))}
+                          {portfolios.length > 0 && (
+                            <>
+                              <div className="my-1 h-px bg-border" />
+                              <button
+                                className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-left transition-colors ${
+                                  !project.portfolioId ? 'bg-accent font-medium' : 'hover:bg-accent/50'
+                                }`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMoveProject(project.id, null);
+                                }}
+                              >
+                                <FolderKanban className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="flex-1">Без портфеля</span>
+                                {!project.portfolioId && (
+                                  <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                                )}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+
                     <Button
                       variant="ghost"
                       size="icon"
@@ -919,7 +1052,7 @@ export function ProjectTreeView() {
                           className="h-6 w-6 shrink-0"
                           onClick={() => { setAddingToProject(null); setSelectedElementTypeId(null); setSelectedTaskTypeId(null); }}
                         >
-                          <X className="h-3.5 w-3.5" />
+                          <X className="h-3 w-3" />
                         </Button>
                       </div>
                     )}
@@ -987,8 +1120,229 @@ export function ProjectTreeView() {
                   </div>
                 )}
               </div>
-            );
-          })}
+    );
+  };
+
+  // Loading state
+  if (loading && projects.length === 0) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-4 w-64" />
+        <div className="space-y-3 mt-6">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-14 w-full rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Фильтр дерева */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            ref={filterInputRef}
+            value={filterRaw}
+            onChange={(e) => setFilterRaw(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                if (filterRaw) {
+                  setFilterRaw('');
+                } else {
+                  filterInputRef.current?.blur();
+                }
+              }
+            }}
+            placeholder="Фильтр по дереву…"
+            className="h-9 pl-8 pr-8"
+            aria-label="Фильтр по дереву"
+          />
+          {filterRaw && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterRaw('');
+                filterInputRef.current?.focus();
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Очистить фильтр"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {filterActive && (
+          <span className="text-xs text-muted-foreground shrink-0">
+            {totalFilterMatches > 0 ? (
+              <>найдено: <b className="text-foreground tabular-nums">{totalFilterMatches}</b></>
+            ) : (
+              'совпадений нет'
+            )}
+          </span>
+        )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto h-9 gap-1 text-xs shrink-0 text-muted-foreground"
+          onClick={() => setPortfolioDialogOpen(true)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Портфель
+        </Button>
+      </div>
+
+      {/* Empty state: нет проектов */}
+      {projects.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+            <FolderKanban className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold mb-1">Нет проектов</h3>
+          <p className="text-sm text-muted-foreground mb-4 max-w-xs">
+            Создайте свой первый проект для управления задачами и артефактами
+          </p>
+          <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
+            <CirclePlus className="h-4 w-4" />
+            Создать проект
+          </Button>
+        </div>
+      )}
+
+      {/* Empty state: фильтр ничего не нашёл */}
+      {filterActive && projects.length > 0 && projectViews.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+            <SearchX className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold mb-1">Ничего не найдено</h3>
+          <p className="text-sm text-muted-foreground mb-4 max-w-xs">
+            По фильтру «{filterRaw.trim()}» нет совпадений в названиях проектов и узлов
+          </p>
+          <Button variant="outline" onClick={() => setFilterRaw('')} className="gap-2">
+            <X className="h-4 w-4" />
+            Сбросить фильтр
+          </Button>
+        </div>
+      )}
+
+      {/* Unified tree: портфели как группы + проекты без портфеля */}
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <div className="flex flex-col">
+          {treeGroups.map((group) =>
+            group.type === 'portfolio' ? (
+              <div key={group.key}>
+                {/* Portfolio header */}
+                <div
+                  className="group flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-accent/50 transition-colors"
+                  onClick={() => togglePortfolioCollapsed(group.portfolio.id)}
+                >
+                  <div className="shrink-0 w-4">
+                    {collapsedPortfolios.has(group.portfolio.id) ? (
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                  </div>
+
+                  <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
+
+                  {renamingPortfolioId === group.portfolio.id ? (
+                    <Input
+                      autoFocus
+                      value={renamePortfolioValue}
+                      onChange={(e) => setRenamePortfolioValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitRenamePortfolio(group.portfolio);
+                        if (e.key === 'Escape') setRenamingPortfolioId(null);
+                      }}
+                      onBlur={() => commitRenamePortfolio(group.portfolio)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-6 text-sm font-semibold"
+                    />
+                  ) : (
+                    <span
+                      className="font-semibold text-sm flex-1 min-w-0 truncate cursor-text select-none"
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setRenamingPortfolioId(group.portfolio.id);
+                        setRenamePortfolioValue(group.portfolio.name);
+                      }}
+                      title="Двойной клик для переименования"
+                    >
+                      <HighlightText text={group.portfolio.name} query={filterActive ? filterRaw.trim() : ''} />
+                    </span>
+                  )}
+
+                  {group.portfolio.description && (
+                    <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[240px]">
+                      {group.portfolio.description}
+                    </span>
+                  )}
+
+                  <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                    {group.views.length}
+                  </span>
+
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 hover:!opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setNewPortfolioId(group.portfolio.id);
+                        setCreateDialogOpen(true);
+                      }}
+                      title="Добавить проект в портфель"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletePortfolioId(group.portfolio.id);
+                      }}
+                      title="Удалить портфель"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Portfolio projects */}
+                {!collapsedPortfolios.has(group.portfolio.id) && (
+                  <div className="ml-3 border-l border-border/60 pl-1">
+                    {group.views.length === 0 ? (
+                      <div className="px-3 py-1.5 text-xs text-muted-foreground">
+                        Нет проектов — наведите на портфель и нажмите «+»
+                      </div>
+                    ) : (
+                      group.views.map((v) => renderProjectView(v))
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div key={group.key} className="flex flex-col">
+                {group.showHeader && (
+                  <div className="flex items-center gap-2 px-2 pt-3 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                    <FolderKanban className="h-3 w-3" />
+                    Проекты без портфеля
+                  </div>
+                )}
+                {group.views.map((v) => renderProjectView(v))}
+              </div>
+            ),
+          )}
         </div>
       </DndContext>
 
@@ -1025,6 +1379,22 @@ export function ProjectTreeView() {
                 rows={3}
               />
             </div>
+
+            {portfolios.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">Портфель</label>
+                <select
+                  value={newPortfolioId}
+                  onChange={(e) => setNewPortfolioId(e.target.value)}
+                  className="h-9 text-sm rounded-md border bg-background px-2"
+                >
+                  <option value="">Без портфеля</option>
+                  {portfolios.map((pf) => (
+                    <option key={pf.id} value={pf.id}>{pf.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Цвет</label>
@@ -1076,6 +1446,71 @@ export function ProjectTreeView() {
           <AlertDialogFooter>
             <AlertDialogCancel>Отмена</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDeleteProject}>
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Create portfolio dialog */}
+      <Dialog open={portfolioDialogOpen} onOpenChange={setPortfolioDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Создать портфель</DialogTitle>
+            <DialogDescription>
+              Портфель группирует несколько проектов (например, по клиенту или направлению)
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Название</label>
+              <Input
+                value={newPortfolioName}
+                onChange={(e) => setNewPortfolioName(e.target.value)}
+                placeholder="Например: Клиент ABC"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newPortfolioName.trim()) handleCreatePortfolio();
+                }}
+                autoFocus
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Описание</label>
+              <Textarea
+                value={newPortfolioDescription}
+                onChange={(e) => setNewPortfolioDescription(e.target.value)}
+                placeholder="Необязательно..."
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPortfolioDialogOpen(false)} disabled={creatingPortfolio}>
+              Отмена
+            </Button>
+            <Button onClick={handleCreatePortfolio} disabled={creatingPortfolio || !newPortfolioName.trim()}>
+              {creatingPortfolio ? 'Создание...' : 'Создать'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete portfolio confirmation */}
+      <AlertDialog open={!!deletePortfolioId} onOpenChange={(v) => !v && setDeletePortfolioId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить портфель?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Портфель «{portfolioToDelete?.name}» будет удалён. Проекты внутри него сохранятся,
+              но перестанут быть сгруппированы.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDeletePortfolio}>
               Удалить
             </AlertDialogAction>
           </AlertDialogFooter>

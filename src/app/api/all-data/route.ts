@@ -25,7 +25,7 @@ export async function GET() {
   try {
     const projects = await db.project.findMany({
       where: user.role === 'admin' ? {} : { userId: user.id },
-      include: { _count: { select: { nodes: true } } },
+      include: { _count: { select: { nodes: true } }, portfolio: true },
       orderBy: { updatedAt: 'desc' },
     });
 
@@ -76,6 +76,11 @@ export async function GET() {
       orderBy: { createdAt: 'asc' },
     });
 
+    // Portfolios (группировка проектов)
+    const portfolios = await db.portfolio.findMany({
+      orderBy: [{ order: 'asc' }, { name: 'asc' }],
+    });
+
     // Attachments (лёгкий список для глобального поиска по файлам)
     const attachments = projectIds.length
       ? await db.fileAttachment.findMany({
@@ -99,6 +104,7 @@ export async function GET() {
       elementTypes,
       taskTypes,
       attachments,
+      portfolios,
     });
   } catch (error) {
     console.error('Error fetching all data:', error);

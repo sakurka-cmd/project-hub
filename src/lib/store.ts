@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Project, ProjectNode, ElementType, TaskType, FileAttachment } from '@/types';
+import type { Project, ProjectNode, ElementType, TaskType, FileAttachment, Portfolio } from '@/types';
 import { api } from '@/lib/api';
 import { signOut } from 'next-auth/react';
 
@@ -24,6 +24,7 @@ interface AppState {
   elementTypes: ElementType[];
   taskTypes: TaskType[];
   attachments: FileAttachment[];
+  portfolios: Portfolio[];
   loading: boolean;
 
   // Глобальная навигация (палетка Ctrl+K → раскрыть ветку и выбрать узел)
@@ -48,6 +49,12 @@ interface AppState {
   createProject: (data: Partial<Project>) => Promise<void>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
+
+  // Portfolio actions
+  createPortfolio: (data: { name: string; description?: string | null }) => Promise<void>;
+  updatePortfolio: (id: string, data: { name?: string; description?: string | null }) => Promise<void>;
+  deletePortfolio: (id: string) => Promise<void>;
+  moveProjectToPortfolio: (projectId: string, portfolioId: string | null) => Promise<void>;
 
   // Node actions
   createNode: (data: {
@@ -119,6 +126,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   elementTypes: [],
   taskTypes: [],
   attachments: [],
+  portfolios: [],
   loading: false,
 
   // Навигация
@@ -155,6 +163,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         elementTypes: data.elementTypes || [],
         taskTypes: data.taskTypes || [],
         attachments: data.attachments || [],
+        portfolios: data.portfolios || [],
         loading: false,
       });
     } catch (e) {
@@ -176,6 +185,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteProject: async (id) => {
     await withAuthCheck(() => api.deleteProject(id));
     set({ selectedProjectId: null });
+    await get().loadAllData();
+  },
+
+  // Portfolio CRUD
+  createPortfolio: async (data) => {
+    await withAuthCheck(() => api.createPortfolio(data));
+    await get().loadAllData();
+  },
+  updatePortfolio: async (id, data) => {
+    await withAuthCheck(() => api.updatePortfolio(id, data));
+    await get().loadAllData();
+  },
+  deletePortfolio: async (id) => {
+    await withAuthCheck(() => api.deletePortfolio(id));
+    await get().loadAllData();
+  },
+  moveProjectToPortfolio: async (projectId, portfolioId) => {
+    await withAuthCheck(() => api.updateProject(projectId, { portfolioId }));
     await get().loadAllData();
   },
 

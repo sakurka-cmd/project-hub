@@ -76,11 +76,29 @@ export async function GET() {
       orderBy: { createdAt: 'asc' },
     });
 
+    // Attachments (лёгкий список для глобального поиска по файлам)
+    const attachments = projectIds.length
+      ? await db.fileAttachment.findMany({
+          where: { node: { projectId: { in: projectIds } } },
+          select: {
+            id: true,
+            nodeId: true,
+            fileName: true,
+            originalName: true,
+            mimeType: true,
+            size: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      : [];
+
     return NextResponse.json({
       projects: projectsWithCount,
       nodes: rootNodes.map(parseNodeFields),
       elementTypes,
       taskTypes,
+      attachments,
     });
   } catch (error) {
     console.error('Error fetching all data:', error);

@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Project, ProjectNode, ElementType, TaskType } from '@/types';
+import type { Project, ProjectNode, ElementType, TaskType, FileAttachment } from '@/types';
 import { api } from '@/lib/api';
 import { signOut } from 'next-auth/react';
 
@@ -23,7 +23,13 @@ interface AppState {
   nodes: ProjectNode[];
   elementTypes: ElementType[];
   taskTypes: TaskType[];
+  attachments: FileAttachment[];
   loading: boolean;
+
+  // Глобальная навигация (палетка Ctrl+K → раскрыть ветку и выбрать узел)
+  pendingNavigation: { projectId: string; nodeId: string | null } | null;
+  requestNavigate: (projectId: string, nodeId?: string | null) => void;
+  consumeNavigation: () => { projectId: string; nodeId: string | null } | null;
 
   // Current user
   currentUser: CurrentUser | null;
@@ -112,7 +118,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   nodes: [],
   elementTypes: [],
   taskTypes: [],
+  attachments: [],
   loading: false,
+
+  // Навигация
+  pendingNavigation: null,
+  requestNavigate: (projectId, nodeId = null) =>
+    set({ pendingNavigation: { projectId, nodeId } }),
+  consumeNavigation: () => {
+    const nav = get().pendingNavigation;
+    if (nav) set({ pendingNavigation: null });
+    return nav;
+  },
 
   // UI signals
   pendingCreateProject: false,
@@ -137,6 +154,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         nodes: data.nodes,
         elementTypes: data.elementTypes || [],
         taskTypes: data.taskTypes || [],
+        attachments: data.attachments || [],
         loading: false,
       });
     } catch (e) {

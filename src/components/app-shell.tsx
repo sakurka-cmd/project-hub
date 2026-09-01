@@ -1,15 +1,16 @@
 'use client';
 
 import { SessionProvider, useSession, signIn } from 'next-auth/react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Layers, Menu, Settings, Loader2, Plus } from 'lucide-react';
+import { Layers, Menu, Settings, Loader2, Plus, Search } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { api } from '@/lib/api';
 import { useAppStore } from '@/lib/store';
 import { UserMenu } from '@/components/auth/user-menu';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SearchPalette } from '@/components/search/search-palette';
 import {
   Sheet,
   SheetContent,
@@ -64,7 +65,7 @@ function LoadingSkeleton() {
   );
 }
 
-function TopBar() {
+function TopBar({ onOpenSearch }: { onOpenSearch: () => void }) {
   const isMobile = useIsMobile();
   const { data: session } = useSession();
   const currentUser = useAppStore((s) => s.currentUser);
@@ -98,6 +99,20 @@ function TopBar() {
 
       {/* Logo */}
       <PhLogo />
+
+      {/* Global search trigger (Ctrl+K) */}
+      <button
+        type="button"
+        onClick={onOpenSearch}
+        className="flex h-9 min-w-0 max-w-xs flex-1 items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground transition-colors hover:bg-muted sm:flex-none sm:w-56 md:w-64"
+        aria-label="Открыть поиск (Ctrl+K)"
+      >
+        <Search className="h-4 w-4 shrink-0" />
+        <span className="truncate">Поиск…</span>
+        <kbd className="pointer-events-none ml-auto hidden shrink-0 select-none items-center gap-0.5 rounded border bg-background px-1 font-mono text-[10px] text-muted-foreground sm:inline-flex">
+          Ctrl K
+        </kbd>
+      </button>
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -134,6 +149,19 @@ function AuthenticatedApp() {
   const setCurrentUser = useAppStore((s) => s.setCurrentUser);
   const loadAllData = useAppStore((s) => s.loadAllData);
   const isMobile = useIsMobile();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Глобальный хоткей Ctrl+K / ⌘K → палетка поиска
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (session?.user) {
@@ -166,13 +194,16 @@ function AuthenticatedApp() {
     <div className="flex h-screen overflow-hidden">
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <TopBar />
+        <TopBar onOpenSearch={() => setSearchOpen(true)} />
         <div className="flex-1 overflow-auto">
           <div className="p-4 md:p-6 lg:p-8">
             <ProjectTreeView />
           </div>
         </div>
       </main>
+
+      {/* Глобальный поиск */}
+      <SearchPalette open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   );
 }

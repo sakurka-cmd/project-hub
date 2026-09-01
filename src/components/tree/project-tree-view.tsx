@@ -1,9 +1,16 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import type { ProjectNode } from '@/types';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import type { Project, ProjectNode } from '@/types';
+import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
+import {
+  normQuery,
+  filterTree,
+  projectMatches,
+} from '@/lib/search';
+import { HighlightText } from '@/components/search/highlight-text';
 import {
   PROJECT_STATUS_LABELS,
   PROJECT_STATUS_COLORS,
@@ -53,7 +60,22 @@ import {
   X,
   ListTodo,
   ClipboardList,
+  Search,
+  SearchX,
 } from 'lucide-react';
+
+// Данные проекта после применения фильтра
+interface ProjectViewData {
+  project: Project;
+  /** Что рендерить (отфильтрованные корни или все) */
+  roots: ProjectNode[];
+  /** Узлы, которые нужно принудительно раскрыть */
+  forcedExpand: Set<string>;
+  /** Сколько узлов совпало (0 — совпал сам проект либо фильтр пуст) */
+  matchCount: number;
+  /** Совпал сам проект — показываем целиком */
+  selfMatched: boolean;
+}
 
 // Count all nodes recursively
 function countNodes(nodes: ProjectNode[]): number {
@@ -91,6 +113,9 @@ export function ProjectTreeView() {
   const updateNode = useAppStore((s) => s.updateNode);
   const updateProject = useAppStore((s) => s.updateProject);
   const loadAllData = useAppStore((s) => s.loadAllData);
+  const selectProject = useAppStore((s) => s.selectProject);
+  const pendingNavigation = useAppStore((s) => s.pendingNavigation);
+  const consumeNavigation = useAppStore((s) => s.consumeNavigation);
   const pendingCreateProject = useAppStore((s) => s.pendingCreateProject);
   const consumeCreateProjectRequest = useAppStore((s) => s.consumeCreateProjectRequest);
 
@@ -98,6 +123,12 @@ export function ProjectTreeView() {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<ProjectNode | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+
+  // Быстрый фильтр дерева
+  const [filterRaw, setFilterRaw] = useState('');
+  const filterInputRef = useRef<HTMLInputElement>(null);
+  const filterQuery = normQuery(filterRaw.trim());
+  const filterActive = filterQuery.length > 0;
 
   // Create project dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -310,6 +341,21 @@ export function ProjectTreeView() {
     return false;
   }, [findNodeInTree]);
 
+  // Helper: цепочка id предков от корня до узла (не включая сам узел); null если не найден
+  const findAncestorIds = useCallback((targetId: string, treeNodes: ProjectNode[]): string[] | null => {
+    const walk = (list: ProjectNode[], acc: string[]): string[] | null => {
+      for (const n of list) {
+        if (n.id === targetId) return acc;
+        if (n.children?.length) {
+          const found = walk(n.children, [...acc, n.id]);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return walk(treeNodes, []);
+  }, []);
+
   // DnD: Drag end handler
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -361,6 +407,48 @@ export function ProjectTreeView() {
     });
   }, [projects]);
 
+  // ===== Фильтр дерева: что рендерить по каждому проекту =====
+  const projectViews = useMemo<ProjectViewData[]>(() => {
+    if (!filterQuery) {
+      return filteredProjects.map((p) => ({
+        project: p,
+        roots: getRootNodes(nodes, p.id),
+        forcedExpand: new Set<string>(),
+        matchCount: 0,
+        selfMatched: false,
+      }));
+    }
+    const out: ProjectViewData[] = [];
+    for (const p of filteredProjects) {
+      const roots = getRootNodes(nodes, p.id);
+      if (projectMatches(p, filterQuery)) {
+        // Проект совпал по названию/описанию — показываем целиком
+        out.push({ project: p, roots, forcedExpand: new Set<string>(), matchCount: 0, selfMatched: true });
+      } else {
+        const ft = filterTree(roots, filterQuery);
+        if (ft.matchCount > 0) {
+          out.push({ project: p, roots: ft.roots, forcedExpand: ft.forcedExpand, matchCount: ft.matchCount, selfMatched: false });
+        }
+      }
+    }
+    return out;
+  }, [filteredProjects, nodes, filterQuery]);
+
+  const totalFilterMatches = useMemo(
+    () => projectViews.reduce((sum, v) => sum + v.matchCount, 0),
+    [projectViews],
+  );
+
+  // При активном фильтре — объединённый набор раскрытых узлов (пользовательские + принудительные)
+  const mergedExpanded = useMemo(() => {
+    if (!filterActive) return expandedNodes;
+    const merged = new Set(expandedNodes);
+    for (const v of projectViews) {
+      for (const id of v.forcedExpand) merged.add(id);
+    }
+    return merged;
+  }, [filterActive, expandedNodes, projectViews]);
+
   // Reload handler for child components
   const handleReload = useCallback(async () => {
     await loadAllData();
@@ -374,6 +462,50 @@ export function ProjectTreeView() {
       setSelectedNode(fresh);
     }
   }, [nodes, selectedNode, findNodeInTree]);
+
+  // Навигация из палетки (Ctrl+K): раскрыть проект и цепочку предков, выбрать узел, проскроллить
+  useEffect(() => {
+    if (!pendingNavigation) return;
+    const nav = consumeNavigation();
+    if (!nav) return;
+    const { projectId, nodeId } = nav;
+    selectProject(projectId);
+    if (!nodeId || nodes.length === 0) return;
+
+    const chain = findAncestorIds(nodeId, nodes);
+    if (chain && chain.length > 0) {
+      setExpandedNodes((prev) => {
+        const next = new Set(prev);
+        for (const id of chain) next.add(id);
+        return next;
+      });
+    }
+    const target = findNodeInTree(nodeId, nodes);
+    if (target) {
+      setSelectedNode(target);
+      setDetailOpen(true);
+    }
+    // Скролл после отрисовки раскрытых веток
+    const t = setTimeout(() => {
+      document.getElementById(`node-row-${nodeId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [pendingNavigation, nodes, consumeNavigation, selectProject, findAncestorIds, findNodeInTree]);
+
+  // Хоткей "/" — фокус в фильтр дерева (если пользователь не в поле ввода)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (t && (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable)) return;
+      e.preventDefault();
+      filterInputRef.current?.focus();
+      filterInputRef.current?.select();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Loading state
   if (loading && projects.length === 0) {
@@ -392,8 +524,54 @@ export function ProjectTreeView() {
 
   return (
     <div>
-      {/* Empty state */}
-      {filteredProjects.length === 0 && (
+      {/* Фильтр дерева */}
+      <div className="flex items-center gap-2 mb-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            ref={filterInputRef}
+            value={filterRaw}
+            onChange={(e) => setFilterRaw(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                if (filterRaw) {
+                  setFilterRaw('');
+                } else {
+                  filterInputRef.current?.blur();
+                }
+              }
+            }}
+            placeholder="Фильтр по дереву…"
+            className="h-9 pl-8 pr-8"
+            aria-label="Фильтр по дереву"
+          />
+          {filterRaw && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterRaw('');
+                filterInputRef.current?.focus();
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Очистить фильтр"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {filterActive && (
+          <span className="text-xs text-muted-foreground shrink-0">
+            {totalFilterMatches > 0 ? (
+              <>найдено: <b className="text-foreground tabular-nums">{totalFilterMatches}</b></>
+            ) : (
+              'совпадений нет'
+            )}
+          </span>
+        )}
+      </div>
+
+      {/* Empty state: нет проектов */}
+      {projects.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
             <FolderKanban className="h-8 w-8 text-muted-foreground" />
@@ -409,18 +587,37 @@ export function ProjectTreeView() {
         </div>
       )}
 
+      {/* Empty state: фильтр ничего не нашёл */}
+      {filterActive && projects.length > 0 && projectViews.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+            <SearchX className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold mb-1">Ничего не найдено</h3>
+          <p className="text-sm text-muted-foreground mb-4 max-w-xs">
+            По фильтру «{filterRaw.trim()}» нет совпадений в названиях проектов и узлов
+          </p>
+          <Button variant="outline" onClick={() => setFilterRaw('')} className="gap-2">
+            <X className="h-4 w-4" />
+            Сбросить фильтр
+          </Button>
+        </div>
+      )}
+
       {/* Unified tree: projects as rows, children indented inline */}
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="flex flex-col">
-          {filteredProjects.map((project) => {
-            const isExpanded = expandedProjects.has(project.id);
-            const rootNodes = getRootNodes(nodes, project.id);
+          {projectViews.map(({ project, roots, matchCount, selfMatched }) => {
+            const isExpanded = filterActive ? true : expandedProjects.has(project.id);
+            const rootNodes = roots;
             const nodeCount = countNodes(rootNodes);
+            const displayCount = filterActive ? (selfMatched ? nodeCount : matchCount) : nodeCount;
 
             return (
               <div key={project.id} className="group">
                 {/* Project row — compact, no card wrapper */}
                 <div
+                  id={`project-row-${project.id}`}
                   className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-accent/50 transition-colors"
                   onClick={() => toggleProject(project.id)}
                 >
@@ -521,7 +718,7 @@ export function ProjectTreeView() {
                       }}
                       title="Двойной клик для переименования"
                     >
-                      {project.name}
+                      <HighlightText text={project.name} query={filterActive ? filterRaw.trim() : ''} />
                     </span>
                   )}
 
@@ -574,9 +771,12 @@ export function ProjectTreeView() {
                   </Popover>
 
                   {/* Node count */}
-                  {nodeCount > 0 && (
-                    <span className="text-[10px] text-muted-foreground tabular-nums">
-                      {nodeCount}
+                  {displayCount > 0 && (
+                    <span className={cn(
+                      'text-[10px] tabular-nums',
+                      filterActive ? 'font-semibold text-primary' : 'text-muted-foreground',
+                    )}>
+                      {displayCount}
                     </span>
                   )}
 
@@ -731,13 +931,14 @@ export function ProjectTreeView() {
                             node={rootNode}
                             depth={0}
                             projectId={project.id}
-                            expanded={expandedNodes}
+                            expanded={filterActive ? mergedExpanded : expandedNodes}
                             toggleExpand={toggleNodeExpand}
                             selectedNodeId={selectedNode?.id ?? null}
                             onSelectNode={handleSelectNode}
                             onEditNode={handleEditNode}
                             onDeleteNode={handleDeleteNode}
                             onReload={handleReload}
+                            highlight={filterActive ? filterRaw.trim() : undefined}
                           />
                         ))}
                       </div>

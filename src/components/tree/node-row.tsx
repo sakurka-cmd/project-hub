@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { openExportTable } from '@/lib/export-table';
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
+import { HighlightText } from '@/components/search/highlight-text';
 import {
   BRANCH_TYPE_LABELS,
   BRANCH_TYPE_COLORS,
@@ -71,6 +72,8 @@ interface NodeRowProps {
   onEditNode: (node: ProjectNode) => void;
   onDeleteNode: (node: ProjectNode) => void;
   onReload: () => Promise<void>;
+  /** Активный фильтр дерева — для подсветки совпадений в имени */
+  highlight?: string;
 }
 
 export function NodeRow({
@@ -84,6 +87,7 @@ export function NodeRow({
   onEditNode,
   onDeleteNode,
   onReload,
+  highlight,
 }: NodeRowProps) {
   const { toast } = useToast();
   const createNode = useAppStore((s) => s.createNode);
@@ -360,6 +364,7 @@ export function NodeRow({
   return (
     <>
       <div
+        id={`node-row-${node.id}`}
         ref={mergedRef}
         style={rowStyle}
         className={cn(
@@ -449,7 +454,7 @@ export function NodeRow({
           'truncate font-medium flex-1 min-w-0',
           isTask && node.completed && 'line-through text-muted-foreground',
         )}>
-          {node.name}
+          <HighlightText text={node.name} query={highlight ?? ''} />
         </span>
 
         {/* Branch type badge */}
@@ -703,6 +708,7 @@ export function NodeRow({
               onEditNode={onEditNode}
               onDeleteNode={onDeleteNode}
               onReload={onReload}
+              highlight={highlight}
             />
           ))}
 

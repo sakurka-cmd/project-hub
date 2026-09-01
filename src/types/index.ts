@@ -88,6 +88,19 @@ export interface AllDataResponse {
   nodes: ProjectNode[];
   elementTypes: ElementType[];
   taskTypes: TaskType[];
+  attachments: FileAttachment[];
+}
+
+// ==================== ПОИСК / НАВИГАЦИЯ ====================
+// Плоский элемент поиска (палетка Ctrl+K)
+export interface SearchNodeHit {
+  node: ProjectNode;
+  projectId: string;
+  projectName: string;
+  /** Цепочка предков от корня до самого узла (включая его) */
+  path: ProjectNode[];
+  /** Текст, по которому совпало (для отладки/подсказок) */
+  matchedIn: 'name' | 'fields';
 }
 
 // ==================== SESSION EXTENSIONS ====================

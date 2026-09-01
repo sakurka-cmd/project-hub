@@ -52,7 +52,7 @@ interface AppState {
 
   // Portfolio actions
   createPortfolio: (data: { name: string; description?: string | null }) => Promise<void>;
-  updatePortfolio: (id: string, data: { name?: string; description?: string | null }) => Promise<void>;
+  updatePortfolio: (id: string, data: { name?: string; description?: string | null; order?: number }) => Promise<void>;
   deletePortfolio: (id: string) => Promise<void>;
   moveProjectToPortfolio: (projectId: string, portfolioId: string | null) => Promise<void>;
 

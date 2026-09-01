@@ -66,6 +66,9 @@ import {
   Briefcase,
   FolderInput,
   Check,
+  Pencil,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 // Данные проекта после применения фильтра
@@ -185,6 +188,12 @@ export function ProjectTreeView() {
   const [collapsedPortfolios, setCollapsedPortfolios] = useState<Set<string>>(new Set());
   const [moveProjectId, setMoveProjectId] = useState<string | null>(null);
 
+  // Редактирование портфеля (название + описание) и сортировка
+  const [editingPortfolioId, setEditingPortfolioId] = useState<string | null>(null);
+  const [editPortfolioName, setEditPortfolioName] = useState('');
+  const [editPortfolioDescription, setEditPortfolioDescription] = useState('');
+  const [savingPortfolioEdit, setSavingPortfolioEdit] = useState(false);
+
   // Портфель, выбранный в диалоге создания проекта ('' — без портфеля)
   const [newPortfolioId, setNewPortfolioId] = useState('');
 
@@ -239,6 +248,68 @@ export function ProjectTreeView() {
       }
     }
     setRenamingPortfolioId(null);
+  };
+
+  const openEditPortfolio = (portfolio: Portfolio) => {
+    setEditingPortfolioId(portfolio.id);
+    setEditPortfolioName(portfolio.name);
+    setEditPortfolioDescription(portfolio.description || '');
+  };
+
+  const handleSavePortfolioEdit = async () => {
+    if (!editingPortfolioId) return;
+    const name = editPortfolioName.trim();
+    if (!name) {
+      toast({ title: 'Ошибка', description: 'Введите название портфеля', variant: 'destructive' });
+      return;
+    }
+    setSavingPortfolioEdit(true);
+    try {
+      await updatePortfolio(editingPortfolioId, {
+        name,
+        description: editPortfolioDescription.trim() || null,
+      });
+      setEditingPortfolioId(null);
+      toast({ title: 'Портфель обновлён' });
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err?.message || 'Не удалось сохранить портфель', variant: 'destructive' });
+    } finally {
+      setSavingPortfolioEdit(false);
+    }
+  };
+
+  // Порядок портфелей (order asc, затем по алфавиту) — для сортировки стрелками
+  const sortedPortfolioIds = useMemo(
+    () =>
+      [...portfolios]
+        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ru'))
+        .map((p) => p.id),
+    [portfolios],
+  );
+
+  // Сдвиг портфеля вверх/вниз с нормализацией order (0..n-1)
+  const handleMovePortfolio = async (id: string, dir: -1 | 1) => {
+    const sorted = [...portfolios].sort(
+      (a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ru'),
+    );
+    const idx = sorted.findIndex((p) => p.id === id);
+    const neighbor = sorted[idx + dir];
+    if (idx < 0 || !neighbor) return;
+
+    const next = [...sorted];
+    next[idx] = neighbor;
+    next[idx + dir] = sorted[idx];
+
+    try {
+      // Отправляем только те портфели, чей порядковый индекс изменился
+      for (let i = 0; i < next.length; i++) {
+        if (next[i].order !== i) {
+          await updatePortfolio(next[i].id, { order: i });
+        }
+      }
+    } catch (err: any) {
+      toast({ title: 'Ошибка', description: err?.message || 'Не удалось изменить порядок', variant: 'destructive' });
+    }
   };
 
   const handleConfirmDeletePortfolio = async () => {
@@ -1293,6 +1364,32 @@ export function ProjectTreeView() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="h-6 w-6 text-muted-foreground"
+                      disabled={sortedPortfolioIds[0] === group.portfolio.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMovePortfolio(group.portfolio.id, -1);
+                      }}
+                      title="Переместить портфель выше"
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground"
+                      disabled={sortedPortfolioIds[sortedPortfolioIds.length - 1] === group.portfolio.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMovePortfolio(group.portfolio.id, 1);
+                      }}
+                      title="Переместить портфель ниже"
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-6 w-6"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -1302,6 +1399,18 @@ export function ProjectTreeView() {
                       title="Добавить проект в портфель"
                     >
                       <Plus className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditPortfolio(group.portfolio);
+                      }}
+                      title="Редактировать портфель"
+                    >
+                      <Pencil className="h-3 w-3" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -1493,6 +1602,52 @@ export function ProjectTreeView() {
             </Button>
             <Button onClick={handleCreatePortfolio} disabled={creatingPortfolio || !newPortfolioName.trim()}>
               {creatingPortfolio ? 'Создание...' : 'Создать'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit portfolio dialog */}
+      <Dialog open={!!editingPortfolioId} onOpenChange={(v) => !v && setEditingPortfolioId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Редактировать портфель</DialogTitle>
+            <DialogDescription>
+              Измените название и описание портфеля
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Название</label>
+              <Input
+                value={editPortfolioName}
+                onChange={(e) => setEditPortfolioName(e.target.value)}
+                placeholder="Например: Клиент ABC"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && editPortfolioName.trim()) handleSavePortfolioEdit();
+                }}
+                autoFocus
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Описание</label>
+              <Textarea
+                value={editPortfolioDescription}
+                onChange={(e) => setEditPortfolioDescription(e.target.value)}
+                placeholder="Необязательно..."
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingPortfolioId(null)} disabled={savingPortfolioEdit}>
+              Отмена
+            </Button>
+            <Button onClick={handleSavePortfolioEdit} disabled={savingPortfolioEdit || !editPortfolioName.trim()}>
+              {savingPortfolioEdit ? 'Сохранение...' : 'Сохранить'}
             </Button>
           </DialogFooter>
         </DialogContent>
